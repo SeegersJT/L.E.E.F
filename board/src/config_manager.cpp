@@ -6,15 +6,27 @@ void ConfigManager::initialConfig() {
   config_map["LCD_ADDR"] = 0x27;
   config_map["LCD_COLUMNS"] = 20;
   config_map["LCD_ROWS"] = 4;
+
   config_map["MOISTURE_SENSOR_PIN_MM01"] = 36;
+
   config_map["RELAY_PIN_R01"] = 23;
+
   config_map["LCD_SDA_PIN"] = 21;
   config_map["LCD_SCL_PIN"] = 22;
+
   config_map["MOISTURE_SENSORS_MIN"] = 1200;
   config_map["MOISTURE_SENSORS_MAX"] = 4095;
+
   config_map["ACTIVATE_RELAY_THRESHOLD"] = 50;
   config_map["MOISTURE_SENSORS_INTERVAL_MINUTES"] = 5;
   config_map["RELAY_ON_DURATION"] = 5000;
+
+  config_map["PULSE_RECHECK_DELAY"] = 30000;
+  config_map["MAX_WATERING_PULSES"] = 5;
+
+  config_map["WIFI_CONNECT_MAX_RETRIES"] = 40;
+  config_map["WIFI_CONNECT_RETRY_DELAY"] = 500;
+  config_map["WIFI_RECONNECT_INTERVAL"] = 5000;
 }
 
 void ConfigManager::readFromINI() {

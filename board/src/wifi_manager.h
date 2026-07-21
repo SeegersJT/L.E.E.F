@@ -6,16 +6,18 @@
 
 class WiFiManager {
 public:
-  static void connectToWiFi(int maxRetries = 3, unsigned long retryDelay = 500) {
+  static void connectToWiFi(int maxRetries = config["WIFI_CONNECT_MAX_RETRIES"], unsigned long retryDelay = config["WIFI_CONNECT_RETRY_DELAY"]) {
     display("Connecting WiFi").clear().print();
 
-    // TODO: REPLACE WITH CONFIG VALUES
+    // TODO: REPLACE WITH CONFIG VALUES (blocked on WiFi credential storage - see roadmap)
     const char* WIFI_SSID = "";
     const char* WIFI_PASSWORD = "";
 
+    WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int retries = 0;
+
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries) {
       delay(retryDelay);
       retries++;
@@ -32,6 +34,34 @@ public:
     delay(2000);
   }
 
+  static void maintainConnection() {
+    static bool wasConnected = true;
+    static unsigned long lastReconnectAttempt = 0;
+
+    if (WiFi.status() == WL_CONNECTED) {
+      if (!wasConnected) {
+        Serial.println("WiFi reconnected.");
+        display("WiFi restored").row(3).print();
+        wasConnected = true;
+      }
+      return;
+    }
+
+    if (wasConnected) {
+      Serial.println("WiFi connection lost.");
+      display("WiFi lost").row(3).print();
+      wasConnected = false;
+    }
+
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReconnectAttempt >= (unsigned long)config["WIFI_RECONNECT_INTERVAL"]) {
+      lastReconnectAttempt = currentMillis;
+      Serial.println("Attempting WiFi reconnect...");
+      display("Reconnecting...").row(3).print();
+      WiFi.reconnect();
+    }
+  }
+
   static void setHostname(char* hostname = (char*)"LEEF") {
     WiFi.setHostname(hostname);
   }
@@ -39,7 +69,6 @@ public:
   static WiFiServer server;
 
   static void enableAccessPoint(char* ssid = (char*)"L.E.E.F.") {
-    // Set web server port number to 80
     WiFi.mode(WIFI_AP_STA);
 
     server = WiFiServer(80);
@@ -79,7 +108,7 @@ public:
         if(c == '\n') {
           if(currentLine.length() == 0) {
             client.println("HTTP/1.1 200 OK");
-            client.println("COntent-type:text/html");
+            client.println("Content-type:text/html");
             client.println("Connection: close");
             client.println();
             client.println("<DOCTYPE html><head><title>L.E.E.F.</title></head><body>");
