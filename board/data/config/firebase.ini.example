@@ -1,12 +1,3 @@
-; Firebase Configuration
-; Filled in locally - not committed with real values.
-; FIREBASE_API_KEY: Project Settings > General > Web API Key
-; FIREBASE_DATABASE_URL: e.g. https://your-project-default-rtdb.firebaseio.com
-; FIREBASE_DEVICE_EMAIL/PASSWORD: a dedicated Firebase Auth user for this
-; device (not a personal account) - restrict it in your Realtime Database
-; security rules to only its own /devices/{uid} path.
-; FIREBASE_STORAGE_BUCKET: bare bucket name, e.g. your-project.appspot.com
-; (no gs:// prefix - see the storageBucket note in board-upload-latest-firmware.yml)
 FIREBASE_API_KEY=
 FIREBASE_DATABASE_URL=
 FIREBASE_DEVICE_EMAIL=
