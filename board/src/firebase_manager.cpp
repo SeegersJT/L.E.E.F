@@ -1,0 +1,12 @@
+#include "firebase_manager.h"
+
+String FirebaseManager::deviceId = "";
+String FirebaseManager::idToken = "";
+String FirebaseManager::refreshToken = "";
+unsigned long FirebaseManager::tokenExpiresAt = 0;
+unsigned long FirebaseManager::lastPush = 0;
+
+String FirebaseManager::apiKey = "";
+String FirebaseManager::databaseUrl = "";
+String FirebaseManager::deviceEmail = "";
+String FirebaseManager::devicePassword = "";

@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include "wifi_manager.h"
+#include "ap_manager.h"
+#include "firebase_manager.h"
 #include "globals.h"
 #include "device_wrapper.h"
 
@@ -10,6 +12,8 @@ enum class WateringState { IDLE, PULSE_ON, PULSE_SETTLE };
 
 WateringState wateringState = WateringState::IDLE;
 int wateringPulseCount = 0;
+
+int lastMoisturePercentage = -1;
 
 void listSPIFFSFiles() {
   Serial.println("Listing SPIFFS files:");
@@ -65,6 +69,7 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice>& relayDevice, Devic
     case WateringState::IDLE: {
       if (currentMillis - moistureDevice.getTimestamp() >= config["MOISTURE_SENSORS_INTERVAL_MINUTES"] * 60 * 1000) {
         int moisturePercentage = moistureDevice.getMoisturePercentage();
+        lastMoisturePercentage = moisturePercentage;
         display("Moisture: " + String(moisturePercentage) + "%").clear().print();
 
         if (moisturePercentage < config["ACTIVATE_RELAY_THRESHOLD"]) {
@@ -91,6 +96,7 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice>& relayDevice, Devic
     case WateringState::PULSE_SETTLE: {
       if (currentMillis - relayDevice.getTimestamp() >= config["PULSE_RECHECK_DELAY"]) {
         int moisturePercentage = moistureDevice.getMoisturePercentage();
+        lastMoisturePercentage = moisturePercentage;
         display("Moisture: " + String(moisturePercentage) + "%").clear().print();
 
         if (moisturePercentage >= config["ACTIVATE_RELAY_THRESHOLD"]) {
@@ -128,14 +134,20 @@ void setup() {
 
   config.initialConfig();
   config.readFromINI();
+  config.readStringsFromINI("/config/wifi.ini");
+  config.readStringsFromINI("/config/firebase.ini");
 
   setupDevices();
 
   WiFiManager::setHostname();
 
-  WiFiManager::connectToWiFi();
+  bool wifiConnected = WiFiManager::connectToWiFi();
 
-  WiFiManager::enableAccessPoint();
+  if (!wifiConnected) {
+    APManager::enableAccessPoint();
+  }
+
+  FirebaseManager::begin();
 }
 
 // =========================================================
@@ -147,9 +159,13 @@ void loop() {
 
   WiFiManager::maintainConnection();
 
+  if (lastMoisturePercentage >= 0) {
+    FirebaseManager::pushStatus(lastMoisturePercentage, relay_R01->getState());
+  }
+
   display::checkBacklight();
 
-  WiFiManager::accessPointListen();
+  APManager::handlePortal();
 
   delay(1000);
 }

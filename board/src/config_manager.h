@@ -11,8 +11,18 @@ class ConfigManager {
 public:
     void initialConfig();
     void readFromINI();
+
+    void readStringsFromINI(const String& path);
+
     std::map<String, int> config_map;
     int& operator[](const String& key);
+
+    class StringAccessor {
+    public:
+        std::map<String, String> string_map;
+        String& operator[](const String& key);
+    };
+    StringAccessor str;
 };
 
 #endif // CONFIG_MANAGER_H
