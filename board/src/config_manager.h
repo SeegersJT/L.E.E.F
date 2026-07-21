@@ -7,20 +7,22 @@
 #include <Arduino.h>
 #include "display_wrapper.h"
 
-class ConfigManager {
+class ConfigManager
+{
 public:
     void initialConfig();
     void readFromINI();
 
-    void readStringsFromINI(const String& path);
+    void readStringsFromINI(const String &path);
 
     std::map<String, int> config_map;
-    int& operator[](const String& key);
+    int &operator[](const String &key);
 
-    class StringAccessor {
+    class StringAccessor
+    {
     public:
         std::map<String, String> string_map;
-        String& operator[](const String& key);
+        String &operator[](const String &key);
     };
     StringAccessor str;
 };

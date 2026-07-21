@@ -2,7 +2,8 @@
 #include "display_wrapper.h"
 #include <map>
 
-void ConfigManager::initialConfig() {
+void ConfigManager::initialConfig()
+{
   config_map["LCD_ADDR"] = 0x27;
   config_map["LCD_COLUMNS"] = 20;
   config_map["LCD_ROWS"] = 4;
@@ -21,10 +22,8 @@ void ConfigManager::initialConfig() {
   config_map["MOISTURE_SENSORS_INTERVAL_MINUTES"] = 5;
   config_map["RELAY_ON_DURATION"] = 5000;
 
-
   config_map["PULSE_RECHECK_DELAY"] = 30000;
   config_map["MAX_WATERING_PULSES"] = 5;
-
 
   config_map["WIFI_CONNECT_MAX_RETRIES"] = 40;
   config_map["WIFI_CONNECT_RETRY_DELAY"] = 500;
@@ -33,13 +32,14 @@ void ConfigManager::initialConfig() {
   config_map["FIREBASE_PUSH_INTERVAL"] = 60000;
 }
 
-void ConfigManager::readFromINI() {
+void ConfigManager::readFromINI()
+{
 
   display("Read Config").clear().print();
   display("Initiating...").bottom().print();
   delay(2000);
 
-  if(!SPIFFS.begin(true))
+  if (!SPIFFS.begin(true))
   {
     Serial.println("An error has occurred while mounting SPIFFS");
     display("Read Config").clear().print();
@@ -109,41 +109,50 @@ void ConfigManager::readFromINI() {
   SPIFFS.end();
 }
 
-int& ConfigManager::operator[](const String& key) {
+int &ConfigManager::operator[](const String &key)
+{
   return config_map[key];
 }
 
-String& ConfigManager::StringAccessor::operator[](const String& key) {
+String &ConfigManager::StringAccessor::operator[](const String &key)
+{
   return string_map[key];
 }
 
-void ConfigManager::readStringsFromINI(const String& path) {
-  if (!SPIFFS.begin(true)) {
+void ConfigManager::readStringsFromINI(const String &path)
+{
+  if (!SPIFFS.begin(true))
+  {
     Serial.println("An error has occurred while mounting SPIFFS");
     return;
   }
 
   File configFile = SPIFFS.open(path, "r");
 
-  if (!configFile || !configFile.available()) {
+  if (!configFile || !configFile.available())
+  {
     Serial.println("Couldn't open " + path + " - leaving those values blank.");
-    if (configFile) configFile.close();
+    if (configFile)
+      configFile.close();
     SPIFFS.end();
     return;
   }
 
   String line;
-  while (configFile.available()) {
+  while (configFile.available())
+  {
     line = configFile.readStringUntil('\n');
     line.trim();
 
-    if (line.length() == 0 || line.startsWith(";")) {
+    if (line.length() == 0 || line.startsWith(";"))
+    {
       continue;
     }
 
     int delimiterIndex = line.indexOf('=');
 
-    if (delimiterIndex > 0) {
+    if (delimiterIndex > 0)
+    {
       String key = line.substring(0, delimiterIndex);
       String value = line.substring(delimiterIndex + 1);
       str[key] = value;

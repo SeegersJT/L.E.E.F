@@ -10,93 +10,92 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '14'
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "lts/*"
 
-    - name: Install Dependencies
-      run: |
-        npm install -g firebase-tools
-        npm install firebase-admin
+      - name: Install Dependencies
+        run: |
+          npm install firebase-admin
 
-    - name: Get Latest Firmware
-      id: get_latest_firmware
-      run: |
-        firmware_file="board/firmware/LEEF_Firmware.bin"
-        if [ -f "$firmware_file" ]; then
-          echo "firmware_file=$firmware_file" >> $GITHUB_ENV
-        else
-          echo "File not found: $firmware_file"
-          exit 1
-        fi
+      - name: Get Latest Firmware
+        id: get_latest_firmware
+        run: |
+          firmware_file="board/firmware/LEEF_Firmware.bin"
+          if [ -f "$firmware_file" ]; then
+            echo "firmware_file=$firmware_file" >> $GITHUB_ENV
+          else
+            echo "File not found: $firmware_file"
+            exit 1
+          fi
 
-    - name: Upload to Firebase Storage
-      env:
-        FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        FIREBASE_STORAGE_URL: ${{ secrets.FIREBASE_STORAGE_URL }}
-      run: |
-        echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
-        node -e "
-        const admin = require('firebase-admin');
-        const fs = require('fs');
-        const path = process.env.firmware_file;
-        const filename = path.split('/').pop();
+      - name: Upload to Firebase Storage
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_STORAGE_URL: ${{ secrets.FIREBASE_STORAGE_URL }}
+        run: |
+          echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
+          node -e "
+          const admin = require('firebase-admin');
+          const fs = require('fs');
+          const path = process.env.firmware_file;
+          const filename = path.split('/').pop();
 
-        const serviceAccount = require('./firebase-service-account.json');
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          storageBucket: process.env.FIREBASE_STORAGE_URL
-        });
+          const serviceAccount = require('./firebase-service-account.json');
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            storageBucket: process.env.FIREBASE_STORAGE_URL
+          });
 
-        const bucket = admin.storage().bucket();
-        bucket.upload(path, {
-          destination: \`firmware/\${filename}\`
-        }).then(() => {
-          console.log('File uploaded successfully');
-          process.exit(0); // Ensure process exits after successful upload
-        }).catch(err => {
-          console.error('ERROR:', err);
-          process.exit(1); // Ensure process exits with error code on failure
-        });
-        "
+          const bucket = admin.storage().bucket();
+          bucket.upload(path, {
+            destination: \`firmware/\${filename}\`
+          }).then(() => {
+            console.log('File uploaded successfully');
+            process.exit(0); // Ensure process exits after successful upload
+          }).catch(err => {
+            console.error('ERROR:', err);
+            process.exit(1); // Ensure process exits with error code on failure
+          });
+          "
 
-    - name: Update Firebase Realtime Database
-      env:
-        FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        FIREBASE_REALTIME_DATABASE_URL: ${{ secrets.FIREBASE_REALTIME_DATABASE_URL }}
-        FIREBASE_STORAGE_URL: ${{ secrets.FIREBASE_STORAGE_URL }}
-      run: |
-        echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
-        node -e "
-        const admin = require('firebase-admin');
-        const serviceAccount = require('./firebase-service-account.json');
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          databaseURL: process.env.FIREBASE_REALTIME_DATABASE_URL
-        });
-        const db = admin.database();
-        const ref = db.ref('firmware');
-        const path = process.env.firmware_file;
-        const filename = path.split('/').pop();
-        const uploadDate = new Date().toISOString();
-        const formattedDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
-        const objectName = \`__ LEEF FIRMWARE __ \${formattedDate} __\`;
-        const fileUrl = \`${FIREBASE_STORAGE_URL}/firmware/\${filename}\`;
-        ref.child(objectName.replace(/\\./g, '_')).set({
-          dateUploaded: uploadDate,
-          filename: filename,
-          url: fileUrl
-        }, (error) => {
-          if (error) {
-            console.error('Error updating database:', error);
-            process.exit(1);
-          } else {
-            console.log('Database updated successfully');
-            process.exit(0);
-          }
-        });
-        "
+      - name: Update Firebase Realtime Database
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_REALTIME_DATABASE_URL: ${{ secrets.FIREBASE_REALTIME_DATABASE_URL }}
+          FIREBASE_STORAGE_URL: ${{ secrets.FIREBASE_STORAGE_URL }}
+        run: |
+          echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
+          node -e "
+          const admin = require('firebase-admin');
+          const serviceAccount = require('./firebase-service-account.json');
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: process.env.FIREBASE_REALTIME_DATABASE_URL
+          });
+          const db = admin.database();
+          const ref = db.ref('firmware');
+          const path = process.env.firmware_file;
+          const filename = path.split('/').pop();
+          const uploadDate = new Date().toISOString();
+          const formattedDate = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+          const objectName = \`__ LEEF FIRMWARE __ \${formattedDate} __\`;
+          const fileUrl = \`\${process.env.FIREBASE_STORAGE_URL}/firmware/\${filename}\`;
+          ref.child(objectName.replace(/\\./g, '_')).set({
+            dateUploaded: uploadDate,
+            filename: filename,
+            url: fileUrl
+          }, (error) => {
+            if (error) {
+              console.error('Error updating database:', error);
+              process.exit(1);
+            } else {
+              console.log('Database updated successfully');
+              process.exit(0);
+            }
+          });
+          "
