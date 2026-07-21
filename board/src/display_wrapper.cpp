@@ -1,7 +1,12 @@
 #include "display_wrapper.h"
 #include "globals.h"
 
-LiquidCrystal_I2C lcd_display(config["LCD_ADDR"], config["LCD_COLUMNS"], config["LCD_ROWS"]);
+// Constructed lazily in display::init() (called from setup(), after
+// config.initialConfig() has populated LCD_ADDR/COLUMNS/ROWS) rather than
+// as a global object here - a global LiquidCrystal_I2C would run its
+// constructor during static initialization, before config_map has any
+// values in it, silently binding to I2C address 0 with 0 columns/rows.
+LiquidCrystal_I2C* lcd_display = nullptr;
 
 unsigned long display::lastDisplayTime = 0;
 
@@ -34,31 +39,34 @@ display& display::column(int column) {
 }
 
 void display::print() {
-    if (this->shouldClear) lcd_display.clear();
-
-    lcd_display.setCursor(this->targetColumn, this->targetRow);
-    lcd_display.print(this->message);
-
     Serial.println("[" + this->message + "]");
+
+    if (!lcd_display) return; // init() hasn't run yet - nothing to write to
+
+    if (this->shouldClear) lcd_display->clear();
+    lcd_display->setCursor(this->targetColumn, this->targetRow);
+    lcd_display->print(this->message);
 
     display::lastDisplayTime = millis();
     display::backlight();
 }
 
 void display::init() {
-    lcd_display.init();
+    lcd_display = new LiquidCrystal_I2C(config["LCD_ADDR"], config["LCD_COLUMNS"], config["LCD_ROWS"]);
+    lcd_display->init();
     display::backlight();
 }
 
 void display::clearDisplay() {
-    lcd_display.clear();
+    if (lcd_display) lcd_display->clear();
 }
 
 void display::backlight(bool enableBacklight) {
+    if (!lcd_display) return;
     if (enableBacklight) {
-        lcd_display.backlight();
+        lcd_display->backlight();
     } else {
-        lcd_display.noBacklight();
+        lcd_display->noBacklight();
     }
 }
 

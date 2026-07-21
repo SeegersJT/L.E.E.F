@@ -15,8 +15,10 @@ public:
     static WebServer webServer;
     static DNSServer dnsServer;
 
-    static void enableAccessPoint(const char *ssid = "L.E.E.F_Setup")
+    static void enableAccessPoint(const char *ssid = "L.E.E.F. SETUP")
     {
+        apSsid = String(ssid);
+
         WiFi.mode(WIFI_AP_STA);
 
         IPAddress local_ip(10, 0, 0, 1);
@@ -38,22 +40,40 @@ public:
         webServer.begin();
 
         apActive = true;
-
-        display("Connect WiFi to:").clear().print();
-        display(String(ssid)).row(1).print();
-        display("Then visit:").row(2).print();
-        display("10.0.0.1").row(3).print();
     }
 
     static void handlePortal()
     {
         if (!apActive)
             return;
+
+        static unsigned long lastToggle = 0;
+        static bool showingJoinStep = true;
+        unsigned long currentMillis = millis();
+
+        if (currentMillis - lastToggle >= 3000)
+        {
+            lastToggle = currentMillis;
+            showingJoinStep = !showingJoinStep;
+
+            if (showingJoinStep)
+            {
+                display("Join WiFi:").clear().print();
+                display(apSsid).row(1).print();
+            }
+            else
+            {
+                display("Then visit:").clear().print();
+                display("10.0.0.1").row(1).print();
+            }
+        }
+
         dnsServer.processNextRequest();
         webServer.handleClient();
     }
 
 private:
+    static String apSsid;
     static bool apActive;
 
     static void handleRoot()
