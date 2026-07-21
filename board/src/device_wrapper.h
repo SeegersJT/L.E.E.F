@@ -1,11 +1,9 @@
-// devices.h
 #ifndef DEVICE_WRAPPER_H
 #define DEVICE_WRAPPER_H
 
 #include "globals.h"
 #include <string>
 
-// Base Device Class
 class Device {
 public:
     int pin;
@@ -30,7 +28,6 @@ public:
     }
 };
 
-// Moisture Sensor Device Class
 class MoistureDevice : public Device {
     private:
         int moisturePercentage;
@@ -54,7 +51,6 @@ class MoistureDevice : public Device {
         }
 };
 
-// Relay Device Class
 class RelayDevice : public Device {
     private:
         String state;

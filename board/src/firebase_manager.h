@@ -276,13 +276,12 @@ private:
       return false;
     start += searchKey.length();
 
-    // skip whitespace and the colon between the key and its value
     while (start < (int)json.length() && (json[start] == ' ' || json[start] == ':'))
       start++;
 
     if (start >= (int)json.length() || json[start] != '"')
       return false;
-    start++; // skip the opening quote of the value itself
+    start++;
 
     int end = json.indexOf('"', start);
     if (end == -1)

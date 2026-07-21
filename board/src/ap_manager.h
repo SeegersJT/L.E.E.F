@@ -4,7 +4,10 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
+#include <vector>
+#include <algorithm>
 #include "globals.h"
+#include "portal_pages.h"
 
 class APManager
 {
@@ -12,7 +15,7 @@ public:
     static WebServer webServer;
     static DNSServer dnsServer;
 
-    static void enableAccessPoint(const char *ssid = "L.E.E.F.")
+    static void enableAccessPoint(const char *ssid = "L.E.E.F_Setup")
     {
         WiFi.mode(WIFI_AP_STA);
 
@@ -36,8 +39,10 @@ public:
 
         apActive = true;
 
-        display("AP Ready").clear().print();
-        display(String(ssid)).bottom().print();
+        display("Connect WiFi to:").clear().print();
+        display(String(ssid)).row(1).print();
+        display("Then visit:").row(2).print();
+        display("10.0.0.1").row(3).print();
     }
 
     static void handlePortal()
@@ -53,36 +58,37 @@ private:
 
     static void handleRoot()
     {
+        Serial.println("Portal page served, path: " + webServer.uri());
+
         int networkCount = WiFi.scanNetworks();
 
-        String page = "<!DOCTYPE html><html><head><title>L.E.E.F. Setup</title>";
-        page += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
-        page += "<style>body{font-family:sans-serif;padding:16px;}label{display:block;margin-top:12px;}";
-        page += "input,select{width:100%;padding:8px;box-sizing:border-box;}";
-        page += "button{margin-top:16px;padding:10px;width:100%;}</style>";
-        page += "</head><body>";
-        page += "<h2>Connect L.E.E.F. to WiFi</h2>";
-        page += "<form action='/connect' method='POST'>";
-        page += "<label for='ssid'>Network</label>";
-        page += "<select name='ssid' id='ssid'>";
-
+        std::vector<std::pair<String, int>> networks;
         for (int i = 0; i < networkCount; i++)
         {
-            String netSsid = WiFi.SSID(i);
-            if (netSsid.length() == 0)
+            String ssid = WiFi.SSID(i);
+            if (ssid.length() == 0)
                 continue;
 
-            page += "<option value='" + netSsid + "'>" + netSsid + " (" + String(WiFi.RSSI(i)) + " dBm)</option>";
+            int rssi = WiFi.RSSI(i);
+            bool found = false;
+            for (auto &n : networks)
+            {
+                if (n.first == ssid)
+                {
+                    found = true;
+                    if (rssi > n.second)
+                        n.second = rssi;
+                    break;
+                }
+            }
+            if (!found)
+                networks.push_back(std::make_pair(ssid, rssi));
         }
 
-        page += "</select>";
-        page += "<label for='password'>Password</label>";
-        page += "<input type='password' name='password' id='password'>";
-        page += "<button type='submit'>Connect</button>";
-        page += "</form>";
-        page += "</body></html>";
+        std::sort(networks.begin(), networks.end(), [](const std::pair<String, int> &a, const std::pair<String, int> &b)
+                  { return a.second > b.second; });
 
-        webServer.send(200, "text/html", page);
+        webServer.send(200, "text/html", buildNetworkPickerPage(networks));
     }
 
     static void handleConnect()
@@ -106,18 +112,14 @@ private:
             display("Connected!").clear().print();
             display(WiFi.localIP().toString()).bottom().print();
 
-            webServer.send(200, "text/html",
-                           "<!DOCTYPE html><html><body><h2>Connected!</h2>"
-                           "<p>L.E.E.F. is now on your WiFi network.</p></body></html>");
+            webServer.send(200, "text/html", buildConnectedPage(WiFi.localIP().toString()));
         }
         else
         {
             display("Connect failed").clear().print();
             display("Try again").bottom().print();
 
-            webServer.send(200, "text/html",
-                           "<!DOCTYPE html><html><body><h2>Couldn't connect</h2>"
-                           "<p>Check the password and <a href='/'>try again</a>.</p></body></html>");
+            webServer.send(200, "text/html", buildConnectFailedPage());
         }
     }
 };

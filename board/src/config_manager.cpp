@@ -61,7 +61,6 @@ void ConfigManager::readFromINI()
     delay(500);
   }
 
-  // Check file size and initial contents
   size_t fileSize = configFile.size();
   Serial.println("Config file size: " + String(fileSize));
   if (fileSize == 0)
