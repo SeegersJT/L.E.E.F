@@ -56,9 +56,6 @@ public:
             lastToggle = currentMillis;
             showingJoinStep = !showingJoinStep;
 
-            display("Then visit:").clear().print();
-            display("10.0.0.1").row(1).print();
-
             if (showingJoinStep)
             {
                 display("Join WiFi:").clear().print();
