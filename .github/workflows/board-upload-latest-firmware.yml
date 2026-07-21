@@ -40,18 +40,18 @@ jobs:
         run: |
           echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
           node -e "
-          const admin = require('firebase-admin');
-          const fs = require('fs');
+          const { initializeApp, cert } = require('firebase-admin/app');
+          const { getStorage } = require('firebase-admin/storage');
           const path = process.env.firmware_file;
           const filename = path.split('/').pop();
 
           const serviceAccount = require('./firebase-service-account.json');
-          admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+          initializeApp({
+            credential: cert(serviceAccount),
             storageBucket: process.env.FIREBASE_STORAGE_URL
           });
 
-          const bucket = admin.storage().bucket();
+          const bucket = getStorage().bucket();
           bucket.upload(path, {
             destination: \`firmware/\${filename}\`
           }).then(() => {
@@ -71,13 +71,14 @@ jobs:
         run: |
           echo "${FIREBASE_SERVICE_ACCOUNT}" > firebase-service-account.json
           node -e "
-          const admin = require('firebase-admin');
+          const { initializeApp, cert } = require('firebase-admin/app');
+          const { getDatabase } = require('firebase-admin/database');
           const serviceAccount = require('./firebase-service-account.json');
-          admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
+          initializeApp({
+            credential: cert(serviceAccount),
             databaseURL: process.env.FIREBASE_REALTIME_DATABASE_URL
           });
-          const db = admin.database();
+          const db = getDatabase();
           const ref = db.ref('firmware');
           const path = process.env.firmware_file;
           const filename = path.split('/').pop();
