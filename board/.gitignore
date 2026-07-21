@@ -4,5 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 
+firmware/*.bak
+
 data/config/wifi.ini
 data/config/firebase.ini
