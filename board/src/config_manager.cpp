@@ -30,6 +30,8 @@ void ConfigManager::initialConfig()
   config_map["WIFI_RECONNECT_INTERVAL"] = 5000;
 
   config_map["FIREBASE_PUSH_INTERVAL"] = 60000;
+
+  config_map["OTA_CHECK_INTERVAL"] = 3600000;
 }
 
 void ConfigManager::readFromINI()
@@ -163,4 +165,52 @@ void ConfigManager::readStringsFromINI(const String &path)
   SPIFFS.end();
 
   Serial.println("Read string config from " + path);
+}
+
+void ConfigManager::writeString(const String &path, const String &key, const String &value)
+{
+  if (!SPIFFS.begin(true))
+  {
+    Serial.println("An error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  std::map<String, String> entries;
+  File readFile = SPIFFS.open(path, "r");
+  if (readFile)
+  {
+    while (readFile.available())
+    {
+      String line = readFile.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0 || line.startsWith(";"))
+        continue;
+      int delimiterIndex = line.indexOf('=');
+      if (delimiterIndex > 0)
+      {
+        entries[line.substring(0, delimiterIndex)] = line.substring(delimiterIndex + 1);
+      }
+    }
+    readFile.close();
+  }
+
+  entries[key] = value;
+
+  File writeFile = SPIFFS.open(path, "w");
+  if (!writeFile)
+  {
+    Serial.println("Couldn't open " + path + " for writing.");
+    SPIFFS.end();
+    return;
+  }
+
+  for (std::map<String, String>::iterator it = entries.begin(); it != entries.end(); ++it)
+  {
+    writeFile.println(it->first + "=" + it->second);
+  }
+
+  writeFile.close();
+  SPIFFS.end();
+
+  str[key] = value;
 }

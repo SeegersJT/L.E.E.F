@@ -5,22 +5,29 @@
 #include "globals.h"
 #include "device_wrapper.h"
 
-DeviceWrapper<MoistureDevice>* moistureSensor_MM01;
-DeviceWrapper<RelayDevice>* relay_R01;
+DeviceWrapper<MoistureDevice> *moistureSensor_MM01;
+DeviceWrapper<RelayDevice> *relay_R01;
 
-enum class WateringState { IDLE, PULSE_ON, PULSE_SETTLE };
+enum class WateringState
+{
+  IDLE,
+  PULSE_ON,
+  PULSE_SETTLE
+};
 
 WateringState wateringState = WateringState::IDLE;
 int wateringPulseCount = 0;
 
 int lastMoisturePercentage = -1;
 
-void listSPIFFSFiles() {
+void listSPIFFSFiles()
+{
   Serial.println("Listing SPIFFS files:");
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
 
-  while (file) {
+  while (file)
+  {
     Serial.print("FILE: ");
     Serial.print(file.name());
     Serial.print(" - SIZE: ");
@@ -35,13 +42,15 @@ void listSPIFFSFiles() {
 // START UP
 // =========================================================
 
-void startDisplay() {
+void startDisplay()
+{
   display::init();
   display("Starting...").print();
   delay(5000);
 }
 
-void setupDevices() {
+void setupDevices()
+{
   display("Device Setup").clear().print();
   display("Initiating...").bottom().print();
   delay(2000);
@@ -61,58 +70,74 @@ void setupDevices() {
 // CONNECTORS - Logic to control relay based on moisture sensor
 // =========================================================
 
-void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice>& relayDevice, DeviceWrapper<MoistureDevice>& moistureDevice) {
+void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, DeviceWrapper<MoistureDevice> &moistureDevice)
+{
   unsigned long currentMillis = millis();
 
-  switch (wateringState) {
+  switch (wateringState)
+  {
 
-    case WateringState::IDLE: {
-      if (currentMillis - moistureDevice.getTimestamp() >= config["MOISTURE_SENSORS_INTERVAL_MINUTES"] * 60 * 1000) {
-        int moisturePercentage = moistureDevice.getMoisturePercentage();
-        lastMoisturePercentage = moisturePercentage;
-        display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+  case WateringState::IDLE:
+  {
+    if (currentMillis - moistureDevice.getTimestamp() >= config["MOISTURE_SENSORS_INTERVAL_MINUTES"] * 60 * 1000)
+    {
+      int moisturePercentage = moistureDevice.getMoisturePercentage();
+      lastMoisturePercentage = moisturePercentage;
+      display("Moisture: " + String(moisturePercentage) + "%").clear().print();
 
-        if (moisturePercentage < config["ACTIVATE_RELAY_THRESHOLD"]) {
-          wateringPulseCount = 0;
-          relayDevice.setState("ON");
-          display("Watering... (1)").bottom().print();
-          wateringState = WateringState::PULSE_ON;
-        } else {
-          display("Moisture OK").bottom().print();
-        }
+      if (moisturePercentage < config["ACTIVATE_RELAY_THRESHOLD"])
+      {
+        wateringPulseCount = 0;
+        relayDevice.setState("ON");
+        display("Watering... (1)").bottom().print();
+        wateringState = WateringState::PULSE_ON;
       }
-      break;
-    }
-
-    case WateringState::PULSE_ON: {
-      if (currentMillis - relayDevice.getTimestamp() >= config["RELAY_ON_DURATION"]) {
-        relayDevice.setState("OFF");
-        wateringPulseCount++;
-        wateringState = WateringState::PULSE_SETTLE;
+      else
+      {
+        display("Moisture OK").bottom().print();
       }
-      break;
     }
+    break;
+  }
 
-    case WateringState::PULSE_SETTLE: {
-      if (currentMillis - relayDevice.getTimestamp() >= config["PULSE_RECHECK_DELAY"]) {
-        int moisturePercentage = moistureDevice.getMoisturePercentage();
-        lastMoisturePercentage = moisturePercentage;
-        display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+  case WateringState::PULSE_ON:
+  {
+    if (currentMillis - relayDevice.getTimestamp() >= config["RELAY_ON_DURATION"])
+    {
+      relayDevice.setState("OFF");
+      wateringPulseCount++;
+      wateringState = WateringState::PULSE_SETTLE;
+    }
+    break;
+  }
 
-        if (moisturePercentage >= config["ACTIVATE_RELAY_THRESHOLD"]) {
-          display("Watering done").bottom().print();
-          wateringState = WateringState::IDLE;
-        } else if (wateringPulseCount >= config["MAX_WATERING_PULSES"]) {
-          display("Pulse limit hit").bottom().print();
-          wateringState = WateringState::IDLE;
-        } else {
-          relayDevice.setState("ON");
-          display("Watering... (" + String(wateringPulseCount + 1) + ")").bottom().print();
-          wateringState = WateringState::PULSE_ON;
-        }
+  case WateringState::PULSE_SETTLE:
+  {
+    if (currentMillis - relayDevice.getTimestamp() >= config["PULSE_RECHECK_DELAY"])
+    {
+      int moisturePercentage = moistureDevice.getMoisturePercentage();
+      lastMoisturePercentage = moisturePercentage;
+      display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+
+      if (moisturePercentage >= config["ACTIVATE_RELAY_THRESHOLD"])
+      {
+        display("Watering done").bottom().print();
+        wateringState = WateringState::IDLE;
       }
-      break;
+      else if (wateringPulseCount >= config["MAX_WATERING_PULSES"])
+      {
+        display("Pulse limit hit").bottom().print();
+        wateringState = WateringState::IDLE;
+      }
+      else
+      {
+        relayDevice.setState("ON");
+        display("Watering... (" + String(wateringPulseCount + 1) + ")").bottom().print();
+        wateringState = WateringState::PULSE_ON;
+      }
     }
+    break;
+  }
   }
 }
 
@@ -120,12 +145,14 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice>& relayDevice, Devic
 // SETUP - Executed code at the start of the run
 // =========================================================
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
 
   startDisplay();
 
-  if (!SPIFFS.begin(true)) {
+  if (!SPIFFS.begin(true))
+  {
     Serial.println("An error has occurred while mounting SPIFFS");
     return;
   }
@@ -136,6 +163,7 @@ void setup() {
   config.readFromINI();
   config.readStringsFromINI("/config/wifi.ini");
   config.readStringsFromINI("/config/firebase.ini");
+  config.readStringsFromINI("/config/ota_state.ini");
 
   setupDevices();
 
@@ -143,7 +171,8 @@ void setup() {
 
   bool wifiConnected = WiFiManager::connectToWiFi();
 
-  if (!wifiConnected) {
+  if (!wifiConnected)
+  {
     APManager::enableAccessPoint();
   }
 
@@ -154,14 +183,18 @@ void setup() {
 // LOOP - Executed code in ipAddress loop
 // =========================================================
 
-void loop() {
+void loop()
+{
   connectRelayToMoistureSensor(*relay_R01, *moistureSensor_MM01);
 
   WiFiManager::maintainConnection();
 
-  if (lastMoisturePercentage >= 0) {
+  if (lastMoisturePercentage >= 0)
+  {
     FirebaseManager::pushStatus(lastMoisturePercentage, relay_R01->getState());
   }
+
+  FirebaseManager::checkForFirmwareUpdate();
 
   display::checkBacklight();
 

@@ -12,12 +12,11 @@ class ConfigManager
 public:
     void initialConfig();
     void readFromINI();
-
     void readStringsFromINI(const String &path);
+    void writeString(const String &path, const String &key, const String &value);
 
     std::map<String, int> config_map;
     int &operator[](const String &key);
-
     class StringAccessor
     {
     public:
