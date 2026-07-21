@@ -6,6 +6,7 @@
 #include <HTTPClient.h>
 #include <Update.h>
 #include "globals.h"
+#include "time_utils.h"
 
 class FirebaseManager
 {
@@ -28,7 +29,7 @@ public:
       return;
 
     unsigned long currentMillis = millis();
-    if (currentMillis - lastPush < (unsigned long)config["FIREBASE_PUSH_INTERVAL"])
+    if (lastPush != 0 && currentMillis - lastPush < (unsigned long)config["FIREBASE_PUSH_INTERVAL"])
       return;
     lastPush = currentMillis;
 
@@ -40,6 +41,7 @@ public:
 
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(30);
 
     HTTPClient http;
     String url = databaseUrl + "/devices/" + deviceId + "/status.json?auth=" + idToken;
@@ -47,7 +49,10 @@ public:
     String payload = "{";
     payload += "\"moisture\":" + String(moisturePercentage) + ",";
     payload += "\"relayState\":\"" + relayState + "\",";
-    payload += "\"lastSeen\":" + String(currentMillis);
+    payload += "\"appliedFirmwareDate\":\"" + config.str["APPLIED_FIRMWARE_DATE"] + "\",";
+    payload += "\"lastOtaResult\":\"" + lastOtaResult + "\",";
+    payload += "\"lastOtaCheckTime\":\"" + lastOtaCheckTime + "\",";
+    payload += "\"lastSeen\":\"" + currentIsoTimestamp() + "\"";
     payload += "}";
 
     http.begin(client, url);
@@ -72,9 +77,10 @@ public:
       return;
 
     unsigned long currentMillis = millis();
-    if (currentMillis - lastOtaCheck < (unsigned long)config["OTA_CHECK_INTERVAL"])
+    if (lastOtaCheck != 0 && currentMillis - lastOtaCheck < (unsigned long)config["OTA_CHECK_INTERVAL"])
       return;
     lastOtaCheck = currentMillis;
+    lastOtaCheckTime = currentIsoTimestamp();
 
     if (!ensureAuthenticated())
     {
@@ -84,6 +90,7 @@ public:
 
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(30);
 
     HTTPClient http;
     String url = databaseUrl + "/firmware.json?auth=" + idToken + "&orderBy=%22dateUploaded%22&limitToLast=1";
@@ -94,6 +101,7 @@ public:
     if (responseCode != 200)
     {
       Serial.println("OTA check failed: " + String(responseCode));
+      lastOtaResult = "RTDB check failed (" + String(responseCode) + ")";
       http.end();
       return;
     }
@@ -101,12 +109,26 @@ public:
     String response = http.getString();
     http.end();
 
-    String latestDate, latestFilename;
-    if (!extractValue(response, "\"dateUploaded\":\"", latestDate) ||
-        !extractValue(response, "\"filename\":\"", latestFilename))
+    String latestKey, latestDate, latestFilename, latestUrl;
+
+    int keyStart = response.indexOf("{\"") + 2;
+    int keyEnd = response.indexOf("\":{", keyStart);
+    if (keyEnd > keyStart)
+    {
+      latestKey = response.substring(keyStart, keyEnd);
+    }
+
+    if (!extractValue(response, "dateUploaded", latestDate) ||
+        !extractValue(response, "filename", latestFilename))
     {
       Serial.println("OTA check: no firmware entries found yet.");
       return;
+    }
+    extractValue(response, "url", latestUrl);
+
+    if (latestKey.length() > 0)
+    {
+      mirrorFirmwareEntry(latestKey, latestDate, latestFilename, latestUrl);
     }
 
     if (latestDate == config.str["APPLIED_FIRMWARE_DATE"])
@@ -128,6 +150,7 @@ public:
     }
     else
     {
+      lastOtaResult = "OTA download/flash failed";
       display("Update failed").clear().print();
       display("Will retry later").bottom().print();
       delay(2000);
@@ -141,6 +164,8 @@ private:
   static unsigned long tokenExpiresAt;
   static unsigned long lastPush;
   static unsigned long lastOtaCheck;
+  static String lastOtaResult;
+  static String lastOtaCheckTime;
 
   static String apiKey;
   static String databaseUrl;
@@ -167,46 +192,57 @@ private:
 
   static bool signIn()
   {
-    WiFiClientSecure client;
-    client.setInsecure();
-
-    HTTPClient http;
-    String url = String("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=") + apiKey;
-
-    String payload = "{";
-    payload += "\"email\":\"" + deviceEmail + "\",";
-    payload += "\"password\":\"" + devicePassword + "\",";
-    payload += "\"returnSecureToken\":true";
-    payload += "}";
-
-    http.begin(client, url);
-    http.addHeader("Content-Type", "application/json");
-    int responseCode = http.POST(payload);
-    bool success = false;
-
-    if (responseCode == 200)
+    for (int attempt = 0; attempt < 3; attempt++)
     {
-      String response = http.getString();
-      success = extractValue(response, "\"idToken\":\"", idToken) && extractValue(response, "\"refreshToken\":\"", refreshToken);
-      if (success)
+      WiFiClientSecure client;
+      client.setInsecure();
+      client.setHandshakeTimeout(30);
+
+      HTTPClient http;
+      String url = String("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=") + apiKey;
+
+      String payload = "{";
+      payload += "\"email\":\"" + deviceEmail + "\",";
+      payload += "\"password\":\"" + devicePassword + "\",";
+      payload += "\"returnSecureToken\":true";
+      payload += "}";
+
+      http.begin(client, url);
+      http.addHeader("Content-Type", "application/json");
+      int responseCode = http.POST(payload);
+
+      if (responseCode == 200)
       {
-        tokenExpiresAt = millis() + 3000UL * 1000UL;
-        Serial.println("Firebase: signed in.");
+        String response = http.getString();
+
+        bool success = extractValue(response, "idToken", idToken) && extractValue(response, "refreshToken", refreshToken);
+
+        http.end();
+
+        if (success)
+        {
+          tokenExpiresAt = millis() + 3000UL * 1000UL;
+          Serial.println("Firebase: signed in.");
+          return true;
+        }
       }
-    }
-    else
-    {
-      Serial.println("Firebase sign-in failed: " + String(responseCode));
+      else
+      {
+        Serial.println("Firebase sign-in attempt " + String(attempt + 1) + " failed: " + String(responseCode));
+      }
+
+      http.end();
+      delay(1000);
     }
 
-    http.end();
-    return success;
+    return false;
   }
 
   static bool refreshIdToken()
   {
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(30);
 
     HTTPClient http;
     String url = String("https://securetoken.googleapis.com/v1/token?key=") + apiKey;
@@ -232,12 +268,22 @@ private:
     return success;
   }
 
-  static bool extractValue(const String &json, const char *key, String &out)
+  static bool extractValue(const String &json, const char *fieldName, String &out)
   {
-    int start = json.indexOf(key);
+    String searchKey = String("\"") + fieldName + "\"";
+    int start = json.indexOf(searchKey);
     if (start == -1)
       return false;
-    start += strlen(key);
+    start += searchKey.length();
+
+    // skip whitespace and the colon between the key and its value
+    while (start < (int)json.length() && (json[start] == ' ' || json[start] == ':'))
+      start++;
+
+    if (start >= (int)json.length() || json[start] != '"')
+      return false;
+    start++; // skip the opening quote of the value itself
+
     int end = json.indexOf('"', start);
     if (end == -1)
       return false;
@@ -245,10 +291,46 @@ private:
     return true;
   }
 
+  static String urlEncodePathSegment(const String &value)
+  {
+    String encoded = value;
+    encoded.replace(" ", "%20");
+    encoded.replace(":", "%3A");
+    return encoded;
+  }
+
+  static void mirrorFirmwareEntry(const String &key, const String &date, const String &filename, const String &url)
+  {
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String path = databaseUrl + "/devices/" + deviceId + "/config/firmware/" + urlEncodePathSegment(key) + ".json?auth=" + idToken;
+
+    String payload = "{";
+    payload += "\"dateUploaded\":\"" + date + "\",";
+    payload += "\"filename\":\"" + filename + "\",";
+    payload += "\"url\":\"" + url + "\"";
+    payload += "}";
+
+    http.begin(client, path);
+    http.addHeader("Content-Type", "application/json");
+    int responseCode = http.PUT(payload);
+
+    if (responseCode <= 0)
+    {
+      Serial.println("Firmware entry mirror failed: " + http.errorToString(responseCode));
+    }
+
+    http.end();
+  }
+
   static bool applyFirmware(const String &filename)
   {
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(30);
 
     HTTPClient http;
     String encodedPath = "firmware%2F" + filename;
