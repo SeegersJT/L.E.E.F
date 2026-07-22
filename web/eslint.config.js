@@ -32,6 +32,9 @@ export default [
 		rules: {
 			'prettier/prettier': ['error', { endOfLine: 'crlf' }],
 
+			'no-redeclare': 'off',
+			'@typescript-eslint/no-redeclare': 'error',
+
 			'@typescript-eslint/no-unused-vars': 'warn',
 			'@typescript-eslint/no-explicit-any': 'warn',
 

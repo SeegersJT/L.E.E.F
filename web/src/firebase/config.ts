@@ -1,8 +1,8 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth, type Auth } from 'firebase/auth'
-import { getFirestore, Firestore } from 'firebase/firestore'
+import { getFirestore, type Firestore } from 'firebase/firestore'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
-import { getDatabase, Database } from 'firebase/database'
+import { getDatabase, type Database } from 'firebase/database'
 
 const requiredEnvVars = [
 	'VITE_FIREBASE_API_KEY',

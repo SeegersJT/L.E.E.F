@@ -1,6 +1,9 @@
 import {
 	createUserWithEmailAndPassword,
 	signInWithEmailAndPassword,
+	signInWithPopup,
+	GoogleAuthProvider,
+	sendPasswordResetEmail,
 	signOut,
 	onAuthStateChanged,
 	updateProfile,
@@ -18,6 +21,8 @@ export interface RegisterCredentials extends AuthCredentials {
 	displayName: string
 }
 
+const googleProvider = new GoogleAuthProvider()
+
 export const authService = {
 	register: async ({ email, password, displayName }: RegisterCredentials): Promise<User> => {
 		const credential: UserCredential = await createUserWithEmailAndPassword(
@@ -33,6 +38,13 @@ export const authService = {
 		const credential: UserCredential = await signInWithEmailAndPassword(auth, email, password)
 		return credential.user
 	},
+
+	loginWithGoogle: async (): Promise<User> => {
+		const credential: UserCredential = await signInWithPopup(auth, googleProvider)
+		return credential.user
+	},
+
+	resetPassword: (email: string): Promise<void> => sendPasswordResetEmail(auth, email),
 
 	logout: (): Promise<void> => signOut(auth),
 

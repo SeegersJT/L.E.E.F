@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useAppSelector } from '../../hooks/useAppSelector'
 import { useAppDispatch } from '../../hooks/useAppDispatch'
-import { removeSystemNotification } from '@/redux/actions/Notification.action'
 import { toast } from 'sonner'
 import { Toaster } from '../ui/sonner'
+import { removeSystemNotification } from '@/redux/actions/Notification.action'
 
 function Notification() {
 	const dispatch = useAppDispatch()
