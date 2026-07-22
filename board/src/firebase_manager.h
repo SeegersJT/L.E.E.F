@@ -111,6 +111,11 @@ public:
     putHistoryEntry("RELAY_PIN_R01", timestamp, payload);
   }
 
+  // Call this once per loop(). Owns the whole account-pairing lifecycle:
+  // while the device has no owner yet, it periodically checks
+  // devices/{id}/owner, keeps a pairing code published and shown on the
+  // LCD, and once an owner appears it shows a one-time confirmation,
+  // deletes the now-useless code, and goes quiet for the rest of the boot.
   static void maintainPairing()
   {
     if (deviceClaimed || WiFi.status() != WL_CONNECTED)
@@ -392,6 +397,33 @@ private:
     }
 
     http.end();
+
+    WiFiClientSecure indexClient;
+    indexClient.setInsecure();
+    indexClient.setHandshakeTimeout(30);
+
+    HTTPClient indexHttp;
+    String indexUrl = databaseUrl + "/pairingCodes/" + pairingCode + ".json?auth=" + idToken;
+
+    String indexPayload = "{";
+    indexPayload += "\"deviceId\":\"" + deviceId + "\",";
+    indexPayload += "\"createdAt\":{\".sv\":\"timestamp\"}";
+    indexPayload += "}";
+
+    indexHttp.begin(indexClient, indexUrl);
+    indexHttp.addHeader("Content-Type", "application/json");
+    int indexResponseCode = indexHttp.PUT(indexPayload);
+
+    if (indexResponseCode > 0)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code indexed");
+    }
+    else
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code index failed: " + indexHttp.errorToString(indexResponseCode));
+    }
+
+    indexHttp.end();
   }
 
   static void clearPairingCode()
@@ -412,6 +444,23 @@ private:
     }
 
     http.end();
+
+    WiFiClientSecure indexClient;
+    indexClient.setInsecure();
+    indexClient.setHandshakeTimeout(30);
+
+    HTTPClient indexHttp;
+    String indexUrl = databaseUrl + "/pairingCodes/" + pairingCode + ".json?auth=" + idToken;
+
+    indexHttp.begin(indexClient, indexUrl);
+    int indexResponseCode = indexHttp.sendRequest("DELETE");
+
+    if (indexResponseCode <= 0)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code index cleanup failed: " + indexHttp.errorToString(indexResponseCode));
+    }
+
+    indexHttp.end();
   }
 
   static String deviceId;
