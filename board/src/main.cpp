@@ -200,6 +200,7 @@ void loop()
   }
 
   FirebaseManager::checkForFirmwareUpdate();
+  FirebaseManager::maintainPairing();
 
   if (WiFi.status() == WL_CONNECTED)
   {

@@ -5,6 +5,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include <esp_system.h>
 #include "globals.h"
 #include "time_utils.h"
 #include "logger.h"
@@ -24,7 +25,8 @@ public:
     storageBucket = config.str["FIREBASE_STORAGE_BUCKET"];
   }
 
-  static void pushStatus(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
+  static void pushStatus(int moisturePercentage, const String &moistureTimestamp,
+                         const String &relayState, const String &relayTimestamp)
   {
     if (WiFi.status() != WL_CONNECTED)
       return;
@@ -65,6 +67,10 @@ public:
     http.end();
   }
 
+  // Appends one entry under history/MOISTURE_SENSOR_PIN_MM01/{timestamp}.
+  // Call this at the moment a reading is taken, not on a timer - status
+  // pushes happen far more often than the reading actually changes, and
+  // we don't want to spam duplicate history entries.
   static void logMoistureReading(int moisturePercentage, const String &timestamp)
   {
     if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
@@ -84,6 +90,9 @@ public:
     putHistoryEntry("MOISTURE_SENSOR_PIN_MM01", timestamp, payload);
   }
 
+  // Appends one entry under history/RELAY_PIN_R01/{timestamp}. Call this
+  // at the moment the relay actually switches, so history reflects real
+  // ON/OFF transitions rather than the polling loop's cadence.
   static void logRelayEvent(const String &state, const String &timestamp)
   {
     if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
@@ -100,6 +109,40 @@ public:
     payload += "}";
 
     putHistoryEntry("RELAY_PIN_R01", timestamp, payload);
+  }
+
+  static void maintainPairing()
+  {
+    if (deviceClaimed || WiFi.status() != WL_CONNECTED)
+      return;
+
+    unsigned long currentMillis = millis();
+
+    if (lastOwnershipCheck == 0 || currentMillis - lastOwnershipCheck >= (unsigned long)config["PAIRING_CHECK_INTERVAL"])
+    {
+      lastOwnershipCheck = currentMillis;
+      refreshOwnershipStatus();
+    }
+
+    if (deviceClaimed || pairingCode.length() == 0)
+      return;
+
+    if (currentMillis - lastPairingToggle >= 3000)
+    {
+      lastPairingToggle = currentMillis;
+      showingPairingCode = !showingPairingCode;
+
+      if (showingPairingCode)
+      {
+        display("Pairing code:").clear().print();
+        display(pairingCode).bottom().print();
+      }
+      else
+      {
+        display("Enter in app").clear().print();
+        display("to link plant").bottom().print();
+      }
+    }
   }
 
   static void checkForFirmwareUpdate()
@@ -190,7 +233,11 @@ public:
   }
 
 private:
-  static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
+  // NOTE: hardcoded to the project's current single moisture sensor +
+  // single relay. If a second sensor/relay is ever added, this should
+  // become a loop over a device registry instead of two literal blocks.
+  static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp,
+                                   const String &relayState, const String &relayTimestamp)
   {
     String payload = "{";
 
@@ -220,6 +267,11 @@ private:
     return payload;
   }
 
+  // Writes one entry to history/{deviceKey}/{timestamp}.json - reused by
+  // logMoistureReading and logRelayEvent. The timestamp is used as the
+  // RTDB key itself (ISO 8601 sorts correctly as a plain string, so no
+  // need for Firebase's push-ID mechanism or an extra round trip to read
+  // the generated key back).
   static void putHistoryEntry(const String &deviceKey, const String &timestamp, const String &payload)
   {
     WiFiClientSecure client;
@@ -246,6 +298,122 @@ private:
     http.end();
   }
 
+  // Checks devices/{id}/owner. If it's still unset, makes sure a pairing
+  // code exists and is published. If it's now set, flips deviceClaimed
+  // and cleans up the pairing code - this is the only place that
+  // transitions unclaimed -> claimed.
+  static void refreshOwnershipStatus()
+  {
+    if (!ensureAuthenticated())
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Not authenticated, skipping ownership check");
+      return;
+    }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String url = databaseUrl + "/devices/" + deviceId + "/owner.json?auth=" + idToken;
+
+    http.begin(client, url);
+    int responseCode = http.GET();
+
+    if (responseCode != 200)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Ownership check failed: " + String(responseCode));
+      http.end();
+      return;
+    }
+
+    String response = http.getString();
+    http.end();
+    response.trim();
+
+    if (response == "null" || response.length() == 0)
+    {
+      if (pairingCode.length() == 0)
+      {
+        pairingCode = generatePairingCode();
+        publishPairingCode();
+      }
+      return;
+    }
+
+    deviceClaimed = true;
+    Logger::log(LogCategory::LOG_FIREBASE, "Device claimed by a user account");
+    clearPairingCode();
+
+    display("Paired!").clear().print();
+    display("Setup complete").bottom().print();
+    delay(2000);
+  }
+
+  // 6 characters, uppercase letters + digits only, with visually
+  // ambiguous characters (0/O, 1/I/L) removed since this gets read off a
+  // tiny LCD and typed on a phone.
+  static String generatePairingCode()
+  {
+    static const char charset[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    const int codeLength = 6;
+
+    randomSeed(esp_random());
+
+    String code = "";
+    for (int i = 0; i < codeLength; i++)
+    {
+      code += charset[random(0, (int)sizeof(charset) - 1)];
+    }
+
+    return code;
+  }
+
+  static void publishPairingCode()
+  {
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String url = databaseUrl + "/devices/" + deviceId + "/pairingCode.json?auth=" + idToken;
+
+    http.begin(client, url);
+    http.addHeader("Content-Type", "application/json");
+    int responseCode = http.PUT("\"" + pairingCode + "\"");
+
+    if (responseCode > 0)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code published");
+    }
+    else
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code publish failed: " + http.errorToString(responseCode));
+    }
+
+    http.end();
+  }
+
+  static void clearPairingCode()
+  {
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String url = databaseUrl + "/devices/" + deviceId + "/pairingCode.json?auth=" + idToken;
+
+    http.begin(client, url);
+    int responseCode = http.sendRequest("DELETE");
+
+    if (responseCode <= 0)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Pairing code cleanup failed: " + http.errorToString(responseCode));
+    }
+
+    http.end();
+  }
+
   static String deviceId;
   static String idToken;
   static String refreshToken;
@@ -254,6 +422,12 @@ private:
   static unsigned long lastOtaCheck;
   static String lastOtaResult;
   static String lastOtaCheckTime;
+
+  static String pairingCode;
+  static bool deviceClaimed;
+  static unsigned long lastOwnershipCheck;
+  static unsigned long lastPairingToggle;
+  static bool showingPairingCode;
 
   static String apiKey;
   static String databaseUrl;

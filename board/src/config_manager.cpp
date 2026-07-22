@@ -33,6 +33,8 @@ void ConfigManager::initialConfig()
   config_map["FIREBASE_PUSH_INTERVAL"] = 60000;
 
   config_map["OTA_CHECK_INTERVAL"] = 3600000;
+
+  config_map["PAIRING_CHECK_INTERVAL"] = 30000;
 }
 
 bool ConfigManager::readIntsFromINI(const String &path)

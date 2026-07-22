@@ -11,6 +11,12 @@ unsigned long FirebaseManager::lastOtaCheck = 0;
 String FirebaseManager::lastOtaResult = "";
 String FirebaseManager::lastOtaCheckTime = "";
 
+String FirebaseManager::pairingCode = "";
+bool FirebaseManager::deviceClaimed = false;
+unsigned long FirebaseManager::lastOwnershipCheck = 0;
+unsigned long FirebaseManager::lastPairingToggle = 0;
+bool FirebaseManager::showingPairingCode = false;
+
 String FirebaseManager::apiKey = "";
 String FirebaseManager::databaseUrl = "";
 String FirebaseManager::deviceEmail = "";
