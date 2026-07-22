@@ -8,6 +8,7 @@
 #include <algorithm>
 #include "globals.h"
 #include "portal_pages.h"
+#include "logger.h"
 
 class APManager
 {
@@ -29,8 +30,7 @@ public:
         WiFi.softAP(ssid, NULL);
 
         IPAddress apIP = WiFi.softAPIP();
-        Serial.print("AP IP Address: ");
-        Serial.println(apIP);
+        Logger::log(LogCategory::LOG_AP, "Access point IP: " + apIP.toString());
 
         dnsServer.start(53, "*", apIP);
 
@@ -78,7 +78,7 @@ private:
 
     static void handleRoot()
     {
-        Serial.println("Portal page served, path: " + webServer.uri());
+        Logger::log(LogCategory::LOG_AP, "Portal page served: " + webServer.uri());
 
         int networkCount = WiFi.scanNetworks();
 
@@ -129,6 +129,10 @@ private:
 
         if (WiFi.status() == WL_CONNECTED)
         {
+            config.writeString("/config/wifi_saved.ini", "WIFI_SAVED_SSID", ssid);
+            config.writeString("/config/wifi_saved.ini", "WIFI_SAVED_PASSWORD", password);
+            Logger::log(LogCategory::LOG_AP, "WiFi credentials saved for future boots");
+
             display("Connected!").clear().print();
             display(WiFi.localIP().toString()).bottom().print();
 

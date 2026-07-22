@@ -1,12 +1,13 @@
 #include "config_manager.h"
 #include "display_wrapper.h"
+#include "logger.h"
 #include <map>
 
 void ConfigManager::initialConfig()
 {
   config_map["LCD_ADDR"] = 0x27;
-  config_map["LCD_COLUMNS"] = 20;
-  config_map["LCD_ROWS"] = 4;
+  config_map["LCD_COLUMNS"] = 16;
+  config_map["LCD_ROWS"] = 2;
 
   config_map["MOISTURE_SENSOR_PIN_MM01"] = 36;
 
@@ -34,52 +35,27 @@ void ConfigManager::initialConfig()
   config_map["OTA_CHECK_INTERVAL"] = 3600000;
 }
 
-void ConfigManager::readFromINI()
+bool ConfigManager::readIntsFromINI(const String &path)
 {
-
-  display("Read Config").clear().print();
-  display("Initiating...").bottom().print();
-  delay(2000);
-
   if (!SPIFFS.begin(true))
   {
-    Serial.println("An error has occurred while mounting SPIFFS");
-    display("Read Config").clear().print();
-    display("Error Occurred").bottom().print();
-    delay(500);
-    return;
+    Logger::log(LogCategory::LOG_CONFIG, "SPIFFS mount failed");
+    return false;
   }
 
-  File configFile = SPIFFS.open("/config/hardware.ini", "r");
+  File configFile = SPIFFS.open(path, "r");
 
-  if (!configFile.available())
+  if (!configFile || !configFile.available())
   {
-    Serial.println("Failed to open config file. Cloning example files.");
-    display("Couldn't read config").clear().print();
-    display("Sticking to defaults").bottom().print();
-    configFile.close();
-    delay(500);
-  }
-
-  size_t fileSize = configFile.size();
-  Serial.println("Config file size: " + String(fileSize));
-  if (fileSize == 0)
-  {
-    Serial.println("Config file is empty.");
-    display("Read Config").clear().print();
-    display("Config Empty").bottom().print();
-    delay(5000);
-    configFile.close();
+    Logger::log(LogCategory::LOG_CONFIG, "Couldn't open " + path + " - keeping defaults");
+    if (configFile)
+      configFile.close();
     SPIFFS.end();
-    return;
+    return false;
   }
 
-  String fileContents = configFile.readString();
-  Serial.println("Config file contents:\n" + fileContents);
-  configFile.seek(0);
-
-  Serial.println("Reading config file...");
   String line;
+  int keysLoaded = 0;
 
   while (configFile.available())
   {
@@ -98,16 +74,19 @@ void ConfigManager::readFromINI()
       String key = line.substring(0, delimiterIndex);
       String value = line.substring(delimiterIndex + 1);
 
-      config_map[key] = value.toInt();
+      // Base 0 lets strtol auto-detect "0x.." hex values (e.g. LCD_ADDR)
+      // as well as plain decimal - String::toInt() can't handle the
+      // former and would silently read "0x27" as 0.
+      config_map[key] = (int)strtol(value.c_str(), nullptr, 0);
+      keysLoaded++;
     }
   }
 
-  display("Config read").clear().print();
-  display("successfuly").bottom().print();
-  delay(2000);
-
   configFile.close();
   SPIFFS.end();
+
+  Logger::log(LogCategory::LOG_CONFIG, "Loaded " + String(keysLoaded) + " keys from " + path);
+  return true;
 }
 
 int &ConfigManager::operator[](const String &key)
@@ -124,7 +103,7 @@ void ConfigManager::readStringsFromINI(const String &path)
 {
   if (!SPIFFS.begin(true))
   {
-    Serial.println("An error has occurred while mounting SPIFFS");
+    Logger::log(LogCategory::LOG_CONFIG, "SPIFFS mount failed");
     return;
   }
 
@@ -132,7 +111,7 @@ void ConfigManager::readStringsFromINI(const String &path)
 
   if (!configFile || !configFile.available())
   {
-    Serial.println("Couldn't open " + path + " - leaving those values blank.");
+    Logger::log(LogCategory::LOG_CONFIG, "Couldn't open " + path + " - leaving values blank");
     if (configFile)
       configFile.close();
     SPIFFS.end();
@@ -163,14 +142,14 @@ void ConfigManager::readStringsFromINI(const String &path)
   configFile.close();
   SPIFFS.end();
 
-  Serial.println("Read string config from " + path);
+  Logger::log(LogCategory::LOG_CONFIG, "Loaded string config from " + path);
 }
 
 void ConfigManager::writeString(const String &path, const String &key, const String &value)
 {
   if (!SPIFFS.begin(true))
   {
-    Serial.println("An error has occurred while mounting SPIFFS");
+    Logger::log(LogCategory::LOG_CONFIG, "SPIFFS mount failed");
     return;
   }
 
@@ -198,7 +177,7 @@ void ConfigManager::writeString(const String &path, const String &key, const Str
   File writeFile = SPIFFS.open(path, "w");
   if (!writeFile)
   {
-    Serial.println("Couldn't open " + path + " for writing.");
+    Logger::log(LogCategory::LOG_CONFIG, "Couldn't open " + path + " for writing");
     SPIFFS.end();
     return;
   }

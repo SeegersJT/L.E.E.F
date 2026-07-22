@@ -7,6 +7,7 @@
 #include <Update.h>
 #include "globals.h"
 #include "time_utils.h"
+#include "logger.h"
 
 class FirebaseManager
 {
@@ -23,7 +24,7 @@ public:
     storageBucket = config.str["FIREBASE_STORAGE_BUCKET"];
   }
 
-  static void pushStatus(int moisturePercentage, const String &relayState)
+  static void pushStatus(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
   {
     if (WiFi.status() != WL_CONNECTED)
       return;
@@ -35,7 +36,7 @@ public:
 
     if (!ensureAuthenticated())
     {
-      Serial.println("Firebase: not authenticated, skipping push.");
+      Logger::log(LogCategory::LOG_FIREBASE, "Not authenticated, skipping push");
       return;
     }
 
@@ -46,14 +47,7 @@ public:
     HTTPClient http;
     String url = databaseUrl + "/devices/" + deviceId + "/status.json?auth=" + idToken;
 
-    String payload = "{";
-    payload += "\"moisture\":" + String(moisturePercentage) + ",";
-    payload += "\"relayState\":\"" + relayState + "\",";
-    payload += "\"appliedFirmwareDate\":\"" + config.str["APPLIED_FIRMWARE_DATE"] + "\",";
-    payload += "\"lastOtaResult\":\"" + lastOtaResult + "\",";
-    payload += "\"lastOtaCheckTime\":\"" + lastOtaCheckTime + "\",";
-    payload += "\"lastSeen\":\"" + currentIsoTimestamp() + "\"";
-    payload += "}";
+    String payload = buildStatusPayload(moisturePercentage, moistureTimestamp, relayState, relayTimestamp);
 
     http.begin(client, url);
     http.addHeader("Content-Type", "application/json");
@@ -61,14 +55,51 @@ public:
 
     if (responseCode > 0)
     {
-      Serial.println("Firebase push OK (" + String(responseCode) + ")");
+      Logger::log(LogCategory::LOG_FIREBASE, "Push OK (" + String(responseCode) + ")");
     }
     else
     {
-      Serial.println("Firebase push failed: " + http.errorToString(responseCode));
+      Logger::log(LogCategory::LOG_FIREBASE, "Push failed: " + http.errorToString(responseCode));
     }
 
     http.end();
+  }
+
+  static void logMoistureReading(int moisturePercentage, const String &timestamp)
+  {
+    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
+      return;
+
+    if (!ensureAuthenticated())
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Not authenticated, skipping moisture history entry");
+      return;
+    }
+
+    String payload = "{";
+    payload += "\"reading\":" + String(moisturePercentage) + ",";
+    payload += "\"unit\":\"percent\"";
+    payload += "}";
+
+    putHistoryEntry("MOISTURE_SENSOR_PIN_MM01", timestamp, payload);
+  }
+
+  static void logRelayEvent(const String &state, const String &timestamp)
+  {
+    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
+      return;
+
+    if (!ensureAuthenticated())
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Not authenticated, skipping relay history entry");
+      return;
+    }
+
+    String payload = "{";
+    payload += "\"state\":\"" + state + "\"";
+    payload += "}";
+
+    putHistoryEntry("RELAY_PIN_R01", timestamp, payload);
   }
 
   static void checkForFirmwareUpdate()
@@ -84,7 +115,7 @@ public:
 
     if (!ensureAuthenticated())
     {
-      Serial.println("Firebase: not authenticated, skipping OTA check.");
+      Logger::log(LogCategory::LOG_OTA, "Not authenticated, skipping OTA check");
       return;
     }
 
@@ -100,7 +131,7 @@ public:
 
     if (responseCode != 200)
     {
-      Serial.println("OTA check failed: " + String(responseCode));
+      Logger::log(LogCategory::LOG_OTA, "Firmware check failed: " + String(responseCode));
       lastOtaResult = "RTDB check failed (" + String(responseCode) + ")";
       http.end();
       return;
@@ -121,9 +152,10 @@ public:
     if (!extractValue(response, "dateUploaded", latestDate) ||
         !extractValue(response, "filename", latestFilename))
     {
-      Serial.println("OTA check: no firmware entries found yet.");
+      Logger::log(LogCategory::LOG_OTA, "No firmware entries found yet");
       return;
     }
+
     extractValue(response, "url", latestUrl);
 
     if (latestKey.length() > 0)
@@ -136,7 +168,7 @@ public:
       return;
     }
 
-    Serial.println("New firmware available (" + latestDate + "), downloading...");
+    Logger::log(LogCategory::LOG_OTA, "New firmware available (" + latestDate + "), downloading");
     display("Firmware update").clear().print();
     display("found - flashing").bottom().print();
 
@@ -158,6 +190,62 @@ public:
   }
 
 private:
+  static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
+  {
+    String payload = "{";
+
+    payload += "\"MOISTURE_SENSOR_PIN_MM01\":{";
+    payload += "\"label\":\"MOISTURE SENSOR 01\",";
+    payload += "\"pin\":" + String((int)config["MOISTURE_SENSOR_PIN_MM01"]) + ",";
+    payload += "\"reading\":" + String(moisturePercentage) + ",";
+    payload += "\"unit\":\"percent\",";
+    payload += "\"timestamp\":\"" + moistureTimestamp + "\",";
+    payload += "\"intervalMinutes\":" + String((int)config["MOISTURE_SENSORS_INTERVAL_MINUTES"]);
+    payload += "},";
+
+    payload += "\"RELAY_PIN_R01\":{";
+    payload += "\"label\":\"RELAY 01\",";
+    payload += "\"pin\":" + String((int)config["RELAY_PIN_R01"]) + ",";
+    payload += "\"state\":\"" + relayState + "\",";
+    payload += "\"timestamp\":\"" + relayTimestamp + "\",";
+    payload += "\"onDurationMs\":" + String((int)config["RELAY_ON_DURATION"]);
+    payload += "},";
+
+    payload += "\"appliedFirmwareDate\":\"" + config.str["APPLIED_FIRMWARE_DATE"] + "\",";
+    payload += "\"lastOtaResult\":\"" + lastOtaResult + "\",";
+    payload += "\"lastOtaCheckTime\":\"" + lastOtaCheckTime + "\",";
+    payload += "\"lastSeen\":\"" + currentIsoTimestamp() + "\"";
+    payload += "}";
+
+    return payload;
+  }
+
+  static void putHistoryEntry(const String &deviceKey, const String &timestamp, const String &payload)
+  {
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String url = databaseUrl + "/devices/" + deviceId + "/history/" + deviceKey + "/" +
+                 urlEncodePathSegment(timestamp) + ".json?auth=" + idToken;
+
+    http.begin(client, url);
+    http.addHeader("Content-Type", "application/json");
+    int responseCode = http.PUT(payload);
+
+    if (responseCode > 0)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "History entry logged: " + deviceKey);
+    }
+    else
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "History entry failed: " + http.errorToString(responseCode));
+    }
+
+    http.end();
+  }
+
   static String deviceId;
   static String idToken;
   static String refreshToken;
@@ -222,13 +310,13 @@ private:
         if (success)
         {
           tokenExpiresAt = millis() + 3000UL * 1000UL;
-          Serial.println("Firebase: signed in.");
+          Logger::log(LogCategory::LOG_FIREBASE, "Signed in");
           return true;
         }
       }
       else
       {
-        Serial.println("Firebase sign-in attempt " + String(attempt + 1) + " failed: " + String(responseCode));
+        Logger::log(LogCategory::LOG_FIREBASE, "Sign-in attempt " + String(attempt + 1) + " failed: " + String(responseCode));
       }
 
       http.end();
@@ -260,7 +348,7 @@ private:
       if (success)
       {
         tokenExpiresAt = millis() + 3000UL * 1000UL;
-        Serial.println("Firebase: token refreshed.");
+        Logger::log(LogCategory::LOG_FIREBASE, "Token refreshed");
       }
     }
 
@@ -319,7 +407,7 @@ private:
 
     if (responseCode <= 0)
     {
-      Serial.println("Firmware entry mirror failed: " + http.errorToString(responseCode));
+      Logger::log(LogCategory::LOG_OTA, "Firmware entry mirror failed: " + http.errorToString(responseCode));
     }
 
     http.end();
@@ -341,7 +429,7 @@ private:
 
     if (responseCode != 200)
     {
-      Serial.println("OTA download failed: " + String(responseCode));
+      Logger::log(LogCategory::LOG_OTA, "Download failed: " + String(responseCode));
       http.end();
       return false;
     }
@@ -351,14 +439,14 @@ private:
 
     if (contentLength <= 0)
     {
-      Serial.println("OTA download: unknown content length, aborting.");
+      Logger::log(LogCategory::LOG_OTA, "Unknown content length, aborting download");
       http.end();
       return false;
     }
 
     if (!Update.begin(contentLength))
     {
-      Serial.println("OTA: not enough space for update (" + String(contentLength) + " bytes).");
+      Logger::log(LogCategory::LOG_OTA, "Not enough space for update (" + String(contentLength) + " bytes)");
       http.end();
       return false;
     }
@@ -368,14 +456,14 @@ private:
 
     if (written != (size_t)contentLength)
     {
-      Serial.println("OTA write incomplete: " + String(written) + "/" + String(contentLength));
+      Logger::log(LogCategory::LOG_OTA, "Write incomplete: " + String(written) + "/" + String(contentLength));
       Update.abort();
       return false;
     }
 
     if (!Update.end(true))
     {
-      Serial.println("OTA finalize failed, error code: " + String(Update.getError()));
+      Logger::log(LogCategory::LOG_OTA, "Finalize failed, error code: " + String(Update.getError()));
       return false;
     }
 

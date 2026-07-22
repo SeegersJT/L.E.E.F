@@ -5,38 +5,29 @@
 #include "time_utils.h"
 #include "globals.h"
 #include "device_wrapper.h"
+#include "logger.h"
 
 DeviceWrapper<MoistureDevice> *moistureSensor_MM01;
 DeviceWrapper<RelayDevice> *relay_R01;
-
-enum class WateringState
-{
-  IDLE,
-  PULSE_ON,
-  PULSE_SETTLE
-};
 
 WateringState wateringState = WateringState::IDLE;
 int wateringPulseCount = 0;
 
 int lastMoisturePercentage = -1;
+String lastMoistureTimestamp = "";
+String lastRelayTimestamp = "";
 
 void listSPIFFSFiles()
 {
-  Serial.println("Listing SPIFFS files:");
+  Logger::log(LogCategory::LOG_BOOT, "Listing SPIFFS files");
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
 
   while (file)
   {
-    Serial.print("FILE: ");
-    Serial.print(file.name());
-    Serial.print(" - SIZE: ");
-    Serial.println(file.size());
+    Logger::log(LogCategory::LOG_BOOT, String(file.name()) + " (" + String(file.size()) + " bytes)");
     file = root.openNextFile();
   }
-
-  Serial.println("");
 }
 
 void startDisplay()
@@ -76,12 +67,16 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, Devic
     {
       int moisturePercentage = moistureDevice.getMoisturePercentage();
       lastMoisturePercentage = moisturePercentage;
+      lastMoistureTimestamp = currentIsoTimestamp();
+      FirebaseManager::logMoistureReading(moisturePercentage, lastMoistureTimestamp);
       display("Moisture: " + String(moisturePercentage) + "%").clear().print();
 
       if (moisturePercentage < config["ACTIVATE_RELAY_THRESHOLD"])
       {
         wateringPulseCount = 0;
         relayDevice.setState("ON");
+        lastRelayTimestamp = currentIsoTimestamp();
+        FirebaseManager::logRelayEvent("ON", lastRelayTimestamp);
         display("Watering... (1)").bottom().print();
         wateringState = WateringState::PULSE_ON;
       }
@@ -98,6 +93,8 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, Devic
     if (currentMillis - relayDevice.getTimestamp() >= config["RELAY_ON_DURATION"])
     {
       relayDevice.setState("OFF");
+      lastRelayTimestamp = currentIsoTimestamp();
+      FirebaseManager::logRelayEvent("OFF", lastRelayTimestamp);
       wateringPulseCount++;
       wateringState = WateringState::PULSE_SETTLE;
     }
@@ -110,6 +107,8 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, Devic
     {
       int moisturePercentage = moistureDevice.getMoisturePercentage();
       lastMoisturePercentage = moisturePercentage;
+      lastMoistureTimestamp = currentIsoTimestamp();
+      FirebaseManager::logMoistureReading(moisturePercentage, lastMoistureTimestamp);
       display("Moisture: " + String(moisturePercentage) + "%").clear().print();
 
       if (moisturePercentage >= config["ACTIVATE_RELAY_THRESHOLD"])
@@ -125,6 +124,8 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, Devic
       else
       {
         relayDevice.setState("ON");
+        lastRelayTimestamp = currentIsoTimestamp();
+        FirebaseManager::logRelayEvent("ON", lastRelayTimestamp);
         display("Watering... (" + String(wateringPulseCount + 1) + ")").bottom().print();
         wateringState = WateringState::PULSE_ON;
       }
@@ -134,22 +135,35 @@ void connectRelayToMoistureSensor(DeviceWrapper<RelayDevice> &relayDevice, Devic
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
 
   config.initialConfig();
 
   startDisplay();
 
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An error has occurred while mounting SPIFFS");
+  if (!SPIFFS.begin(true))
+  {
+    Logger::log(LogCategory::LOG_BOOT, "SPIFFS mount failed");
     return;
   }
 
   listSPIFFSFiles();
 
-  config.readFromINI();
+  display("Loading Config").clear().print();
+
+  bool hardwareOk = config.readIntsFromINI("/config/hardware.ini");
+  bool pinsOk = config.readIntsFromINI("/config/pins.ini");
+  bool timingsOk = config.readIntsFromINI("/config/timings.ini");
+  bool networkOk = config.readIntsFromINI("/config/network.ini");
+  bool configOk = hardwareOk && pinsOk && timingsOk && networkOk;
+
+  display(configOk ? "Config Loaded" : "Config Issues").bottom().print();
+  delay(1000);
+
   config.readStringsFromINI("/config/wifi.ini");
+  config.readStringsFromINI("/config/wifi_saved.ini");
   config.readStringsFromINI("/config/firebase.ini");
   config.readStringsFromINI("/config/ota_state.ini");
 
@@ -157,11 +171,18 @@ void setup() {
 
   WiFiManager::setHostname();
 
-  bool wifiConnected = WiFiManager::connectToWiFi();
+  bool wifiConnected = WiFiManager::connectToWiFi(config.str["WIFI_SAVED_SSID"], config.str["WIFI_SAVED_PASSWORD"]);
+
+  if (!wifiConnected)
+  {
+    Logger::log(LogCategory::LOG_WIFI, "Saved WiFi unavailable, trying wifi.ini default");
+    wifiConnected = WiFiManager::connectToWiFi(config.str["WIFI_SSID"], config.str["WIFI_PASSWORD"]);
+  }
 
   beginTimeSync();
 
-  if (!wifiConnected) {
+  if (!wifiConnected)
+  {
     APManager::enableAccessPoint();
   }
 
@@ -175,7 +196,7 @@ void loop()
 
   if (lastMoisturePercentage >= 0)
   {
-    FirebaseManager::pushStatus(lastMoisturePercentage, relay_R01->getState());
+    FirebaseManager::pushStatus(lastMoisturePercentage, lastMoistureTimestamp, relay_R01->getState(), lastRelayTimestamp);
   }
 
   FirebaseManager::checkForFirmwareUpdate();

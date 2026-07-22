@@ -11,7 +11,7 @@ class ConfigManager
 {
 public:
     void initialConfig();
-    void readFromINI();
+    bool readIntsFromINI(const String &path);
     void readStringsFromINI(const String &path);
     void writeString(const String &path, const String &key, const String &value);
 

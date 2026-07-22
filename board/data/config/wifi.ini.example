@@ -1,0 +1,4 @@
+; Copy this file to wifi.ini and fill in your bench/default network.
+
+WIFI_SSID=YourNetworkName
+WIFI_PASSWORD=YourNetworkPassword

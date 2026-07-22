@@ -7,4 +7,5 @@
 firmware/*.bak
 
 data/config/wifi.ini
+data/config/wifi_saved.ini
 data/config/firebase.ini

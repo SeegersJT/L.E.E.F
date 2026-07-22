@@ -1,0 +1,7 @@
+; Copy this file to firebase.ini and fill in your Firebase project's details
+
+FIREBASE_API_KEY=your-firebase-web-api-key
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.firebaseio.com
+FIREBASE_DEVICE_EMAIL=device@example.com
+FIREBASE_DEVICE_PASSWORD=your-device-account-password
+FIREBASE_STORAGE_BUCKET=your-project.appspot.com
