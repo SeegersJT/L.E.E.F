@@ -67,10 +67,6 @@ public:
     http.end();
   }
 
-  // Appends one entry under history/MOISTURE_SENSOR_PIN_MM01/{timestamp}.
-  // Call this at the moment a reading is taken, not on a timer - status
-  // pushes happen far more often than the reading actually changes, and
-  // we don't want to spam duplicate history entries.
   static void logMoistureReading(int moisturePercentage, const String &timestamp)
   {
     if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
@@ -90,9 +86,6 @@ public:
     putHistoryEntry("MOISTURE_SENSOR_PIN_MM01", timestamp, payload);
   }
 
-  // Appends one entry under history/RELAY_PIN_R01/{timestamp}. Call this
-  // at the moment the relay actually switches, so history reflects real
-  // ON/OFF transitions rather than the polling loop's cadence.
   static void logRelayEvent(const String &state, const String &timestamp)
   {
     if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
@@ -111,11 +104,6 @@ public:
     putHistoryEntry("RELAY_PIN_R01", timestamp, payload);
   }
 
-  // Call this once per loop(). Owns the whole account-pairing lifecycle:
-  // while the device has no owner yet, it periodically checks
-  // devices/{id}/owner, keeps a pairing code published and shown on the
-  // LCD, and once an owner appears it shows a one-time confirmation,
-  // deletes the now-useless code, and goes quiet for the rest of the boot.
   static void maintainPairing()
   {
     if (deviceClaimed || WiFi.status() != WL_CONNECTED)
@@ -238,9 +226,6 @@ public:
   }
 
 private:
-  // NOTE: hardcoded to the project's current single moisture sensor +
-  // single relay. If a second sensor/relay is ever added, this should
-  // become a loop over a device registry instead of two literal blocks.
   static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp,
                                    const String &relayState, const String &relayTimestamp)
   {
@@ -272,11 +257,6 @@ private:
     return payload;
   }
 
-  // Writes one entry to history/{deviceKey}/{timestamp}.json - reused by
-  // logMoistureReading and logRelayEvent. The timestamp is used as the
-  // RTDB key itself (ISO 8601 sorts correctly as a plain string, so no
-  // need for Firebase's push-ID mechanism or an extra round trip to read
-  // the generated key back).
   static void putHistoryEntry(const String &deviceKey, const String &timestamp, const String &payload)
   {
     WiFiClientSecure client;
@@ -303,10 +283,6 @@ private:
     http.end();
   }
 
-  // Checks devices/{id}/owner. If it's still unset, makes sure a pairing
-  // code exists and is published. If it's now set, flips deviceClaimed
-  // and cleans up the pairing code - this is the only place that
-  // transitions unclaimed -> claimed.
   static void refreshOwnershipStatus()
   {
     if (!ensureAuthenticated())
@@ -355,9 +331,6 @@ private:
     delay(2000);
   }
 
-  // 6 characters, uppercase letters + digits only, with visually
-  // ambiguous characters (0/O, 1/I/L) removed since this gets read off a
-  // tiny LCD and typed on a phone.
   static String generatePairingCode()
   {
     static const char charset[] = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
