@@ -10,9 +10,6 @@ function PlantsContainer() {
 	const devices = useAppSelector(state => state.devices.devices)
 
 	const [pairOpen, setPairOpen] = useState(false)
-	const [removeTarget, setRemoveTarget] = useState<{ id: string; nickname: string } | null>(null)
-	const [removingId, setRemovingId] = useState<string | null>(null)
-
 	const [lastAddedId, setLastAddedId] = useState<string | null>(null)
 	const previousIdsRef = useRef<Set<string> | null>(null)
 
@@ -52,19 +49,9 @@ function PlantsContainer() {
 		<Plants
 			devices={devices}
 			lastAddedId={lastAddedId}
-			removingId={removingId}
 			pairOpen={pairOpen}
-			removeTarget={removeTarget}
 			onPair={() => setPairOpen(true)}
 			onPairOpenChange={setPairOpen}
-			onRequestRemove={target => setRemoveTarget(target)}
-			onRemoveOpenChange={open => {
-				if (!open) setRemoveTarget(null)
-			}}
-			onRemoved={id => {
-				setRemovingId(id)
-				setTimeout(() => setRemovingId(null), 500)
-			}}
 		/>
 	)
 }

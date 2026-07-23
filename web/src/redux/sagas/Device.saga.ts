@@ -27,7 +27,8 @@ function* watchDeviceStatus(deviceId: string) {
 			yield put(setDeviceStatus({ id: deviceId, status }))
 		}
 	} finally {
-		if (yield cancelled()) {
+		const wasCancelled: boolean = yield cancelled()
+		if (wasCancelled) {
 			channel.close()
 		}
 	}
@@ -59,7 +60,8 @@ function* watchUserDevices(uid: string) {
 			yield put(setDeviceList(entries))
 		}
 	} finally {
-		if (yield cancelled()) {
+		const wasCancelled: boolean = yield cancelled()
+		if (wasCancelled) {
 			channel.close()
 			for (const task of statusTasks.values()) {
 				yield cancel(task)
