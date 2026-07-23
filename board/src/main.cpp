@@ -187,6 +187,10 @@ void setup()
   }
 
   FirebaseManager::begin();
+
+  display("L.E.E.F. Ready").clear().print();
+  display("Watching plants").bottom().print();
+  delay(2000);
 }
 void loop()
 {
