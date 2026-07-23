@@ -10,6 +10,7 @@ export function navigate(to: To, options?: NavigateOptions): void
 export function navigate(delta: number): void
 export function navigate(toOrDelta: To | number, options?: NavigateOptions): void {
 	if (!navigator) {
+		// eslint-disable-next-line no-console
 		console.warn('Navigator: navigate() called before NavigateInjector has mounted.')
 		return
 	}

@@ -5,7 +5,6 @@ import { requestVerifyCode, requestClaimDevice, resetPairing } from '@/redux/act
 import PairDeviceDialog, {
 	type PairStep,
 } from '@/components/pair-device-dialog/PairDeviceDialog.component'
-import { addSystemNotification } from '@/redux/actions/Notification.action'
 
 interface PairDeviceDialogContainerProps {
 	open: boolean
