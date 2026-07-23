@@ -106,10 +106,20 @@ public:
 
   static void maintainPairing()
   {
-    if (deviceClaimed || WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED)
       return;
 
     unsigned long currentMillis = millis();
+
+    if (deviceClaimed)
+    {
+      if (lastClaimedRecheck == 0 || currentMillis - lastClaimedRecheck >= (unsigned long)config["OWNERSHIP_RECHECK_INTERVAL"])
+      {
+        lastClaimedRecheck = currentMillis;
+        recheckClaimedStatus();
+      }
+      return;
+    }
 
     if (lastOwnershipCheck == 0 || currentMillis - lastOwnershipCheck >= (unsigned long)config["PAIRING_CHECK_INTERVAL"])
     {
@@ -226,8 +236,7 @@ public:
   }
 
 private:
-  static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp,
-                                   const String &relayState, const String &relayTimestamp)
+  static String buildStatusPayload(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
   {
     String payload = "{";
 
@@ -329,6 +338,48 @@ private:
     display("Paired!").clear().print();
     display("Setup complete").bottom().print();
     delay(2000);
+  }
+
+  static void recheckClaimedStatus()
+  {
+    if (!ensureAuthenticated())
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Not authenticated, skipping ownership recheck");
+      return;
+    }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    client.setHandshakeTimeout(30);
+
+    HTTPClient http;
+    String url = databaseUrl + "/devices/" + deviceId + "/owner.json?auth=" + idToken;
+
+    http.begin(client, url);
+    int responseCode = http.GET();
+
+    if (responseCode != 200)
+    {
+      Logger::log(LogCategory::LOG_FIREBASE, "Ownership recheck failed: " + String(responseCode));
+      http.end();
+      return;
+    }
+
+    String response = http.getString();
+    http.end();
+    response.trim();
+
+    if (response == "null" || response.length() == 0)
+    {
+      deviceClaimed = false;
+      pairingCode = "";
+      lastOwnershipCheck = 0;
+      Logger::log(LogCategory::LOG_FIREBASE, "Device was unpaired - resuming pairing mode");
+
+      display("Unpaired").clear().print();
+      display("Ready to re-pair").bottom().print();
+      delay(2000);
+    }
   }
 
   static String generatePairingCode()
@@ -450,6 +501,7 @@ private:
   static unsigned long lastOwnershipCheck;
   static unsigned long lastPairingToggle;
   static bool showingPairingCode;
+  static unsigned long lastClaimedRecheck;
 
   static String apiKey;
   static String databaseUrl;

@@ -1,3 +1,5 @@
-export { default as app, auth, db, storage } from './config'
+export { default as app, auth, db, storage, rtdb } from './config'
 export { authService } from './auth.service'
 export { firestoreService } from './firestore.service'
+export { rtdbService } from './rtdb.service'
+export type { UserDeviceEntry, DeviceHistoryResult } from './rtdb.service'

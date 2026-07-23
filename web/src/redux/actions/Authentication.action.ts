@@ -13,7 +13,12 @@ export const AUTH_ACTIONS = {
 	REQUEST_PASSWORD_RESET: '[AUTH] - REQUEST_PASSWORD_RESET',
 	REQUEST_PASSWORD_RESET_LOADING: '[AUTH] - REQUEST_PASSWORD_RESET_LOADING',
 
+	REQUEST_LOGOUT: '[AUTH] - REQUEST_LOGOUT',
+	REQUEST_LOGOUT_LOADING: '[AUTH] - REQUEST_LOGOUT_LOADING',
+
 	SET_AUTH_USER: '[AUTH] - SET_AUTH_USER',
+
+	RESET_AUTH: '[AUTH] - RESET_AUTH',
 } as const
 
 export const requestFirebaseEmailLogin = (payload: LoginCredentials) => ({
@@ -55,7 +60,20 @@ export const requestPasswordResetLoading = (payload: boolean) => ({
 	payload,
 })
 
+export const requestLogout = () => ({
+	type: AUTH_ACTIONS.REQUEST_LOGOUT,
+})
+
+export const requestLogoutLoading = (payload: boolean) => ({
+	type: AUTH_ACTIONS.REQUEST_LOGOUT_LOADING,
+	payload,
+})
+
 export const setAuthUser = (payload: AuthUser | null) => ({
 	type: AUTH_ACTIONS.SET_AUTH_USER,
 	payload,
+})
+
+export const resetAuthUser = () => ({
+	type: AUTH_ACTIONS.RESET_AUTH,
 })

@@ -36,7 +36,7 @@ function Notification() {
 		})
 	}, [dispatch, notifications])
 
-	return <Toaster position="bottom-right" richColors expand />
+	return <Toaster position="top-center" richColors expand />
 }
 
 export default Notification

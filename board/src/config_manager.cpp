@@ -35,6 +35,7 @@ void ConfigManager::initialConfig()
   config_map["OTA_CHECK_INTERVAL"] = 3600000;
 
   config_map["PAIRING_CHECK_INTERVAL"] = 30000;
+  config_map["OWNERSHIP_RECHECK_INTERVAL"] = 1800000;
 }
 
 bool ConfigManager::readIntsFromINI(const String &path)

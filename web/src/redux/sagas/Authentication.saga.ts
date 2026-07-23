@@ -1,4 +1,5 @@
-import { call, put, takeLatest } from 'redux-saga/effects'
+import { call, put, take, fork, takeLatest } from 'redux-saga/effects'
+import { eventChannel, type EventChannel } from 'redux-saga'
 import type { User } from 'firebase/auth'
 import {
 	AUTH_ACTIONS,
@@ -6,7 +7,9 @@ import {
 	requestFirebaseRegisterLoading,
 	requestFirebaseGoogleLoginLoading,
 	requestPasswordResetLoading,
+	requestLogoutLoading,
 	setAuthUser,
+	resetAuthUser,
 } from '../actions/Authentication.action'
 import { addSystemNotification } from '../actions/Notification.action'
 import type { LoginCredentials, RegisterCredentials, AuthUser } from '../types/Authentication.type'
@@ -20,6 +23,24 @@ const toAuthUser = (user: User): AuthUser => ({
 	photoURL: user.photoURL,
 	emailVerified: user.emailVerified,
 })
+
+function createAuthChannel(): EventChannel<User | null> {
+	return eventChannel(emit => {
+		const unsubscribe = authService.onAuthStateChanged(user => {
+			emit(user)
+		})
+		return unsubscribe
+	})
+}
+
+function* watchAuthState() {
+	const channel: EventChannel<User | null> = yield call(createAuthChannel)
+
+	while (true) {
+		const user: User | null = yield take(channel)
+		yield put(setAuthUser(user ? toAuthUser(user) : null))
+	}
+}
 
 function* handleFirebaseEmailLoginRequest(action: { type: string; payload: LoginCredentials }) {
 	yield put(requestFirebaseEmailLoginLoading(true))
@@ -35,7 +56,7 @@ function* handleFirebaseEmailLoginRequest(action: { type: string; payload: Login
 				message: 'Successfully logged into L.E.E.F. Companion',
 			})
 		)
-		yield call(() => navigate('/dashboard/account'))
+		yield call(() => navigate('/dashboard/plants'))
 	} catch (err) {
 		yield put(
 			addSystemNotification({
@@ -141,9 +162,39 @@ function* handlePasswordResetRequest(action: {
 	}
 }
 
+function* handleLogoutRequest() {
+	yield put(requestLogoutLoading(true))
+
+	try {
+		yield call([authService, authService.logout])
+		yield put(resetAuthUser())
+
+		yield put(
+			addSystemNotification({
+				type: 'success',
+				title: 'Signed out',
+				message: 'Come back soon!',
+			})
+		)
+		yield call(() => navigate('/login'))
+	} catch (err) {
+		yield put(
+			addSystemNotification({
+				type: 'error',
+				title: 'Sign out',
+				message: err instanceof Error ? err.message : 'Failed to sign out',
+			})
+		)
+	} finally {
+		yield put(requestLogoutLoading(false))
+	}
+}
+
 export function* authSaga() {
+	yield fork(watchAuthState)
 	yield takeLatest(AUTH_ACTIONS.REQUEST_FIREBASE_EMAIL_LOGIN, handleFirebaseEmailLoginRequest)
 	yield takeLatest(AUTH_ACTIONS.REQUEST_FIREBASE_REGISTER, handleFirebaseRegisterRequest)
 	yield takeLatest(AUTH_ACTIONS.REQUEST_FIREBASE_GOOGLE_LOGIN, handleFirebaseGoogleLoginRequest)
 	yield takeLatest(AUTH_ACTIONS.REQUEST_PASSWORD_RESET, handlePasswordResetRequest)
+	yield takeLatest(AUTH_ACTIONS.REQUEST_LOGOUT, handleLogoutRequest)
 }

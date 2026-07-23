@@ -16,6 +16,7 @@ bool FirebaseManager::deviceClaimed = false;
 unsigned long FirebaseManager::lastOwnershipCheck = 0;
 unsigned long FirebaseManager::lastPairingToggle = 0;
 bool FirebaseManager::showingPairingCode = false;
+unsigned long FirebaseManager::lastClaimedRecheck = 0;
 
 String FirebaseManager::apiKey = "";
 String FirebaseManager::databaseUrl = "";

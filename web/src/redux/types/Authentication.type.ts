@@ -9,6 +9,7 @@ export interface AuthUser {
 export interface AuthState {
 	user: AuthUser | null
 	loading: boolean
+	initialized: boolean
 }
 
 export interface LoginCredentials {
