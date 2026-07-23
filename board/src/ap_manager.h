@@ -44,6 +44,13 @@ public:
 
     static void handlePortal()
     {
+        if (shutdownPending)
+        {
+            disable();
+            shutdownPending = false;
+            return;
+        }
+
         if (!apActive)
             return;
 
@@ -75,6 +82,17 @@ public:
 private:
     static String apSsid;
     static bool apActive;
+    static bool shutdownPending;
+
+    static void disable()
+    {
+        dnsServer.stop();
+        webServer.stop();
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
+        apActive = false;
+        Logger::log(LogCategory::LOG_AP, "Access point disabled - WiFi connected");
+    }
 
     static void handleRoot()
     {
@@ -116,6 +134,13 @@ private:
         String ssid = webServer.arg("ssid");
         String password = webServer.arg("password");
 
+        if (ssid.length() == 0)
+        {
+            Logger::log(LogCategory::LOG_AP, "Rejected /connect with empty SSID");
+            webServer.send(200, "text/html", buildConnectFailedPage());
+            return;
+        }
+
         display("Connecting to").clear().print();
         display(ssid).bottom().print();
 
@@ -137,6 +162,7 @@ private:
             display(WiFi.localIP().toString()).bottom().print();
 
             webServer.send(200, "text/html", buildConnectedPage(WiFi.localIP().toString()));
+            shutdownPending = true;
         }
         else
         {
