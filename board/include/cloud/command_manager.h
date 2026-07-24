@@ -2,7 +2,7 @@
 #define COMMAND_MANAGER_H
 
 #include <Arduino.h>
-#include <FirebaseClient.h>
+#include "cloud/firebase_service.h"
 #include <vector>
 #include <map>
 #include "hardware/device_wrapper.h"
