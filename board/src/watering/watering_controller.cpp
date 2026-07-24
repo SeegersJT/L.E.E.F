@@ -1,10 +1,10 @@
 #include "watering/watering_controller.h"
 #include "cloud/status_reporter.h"
+#include "cloud/command_manager.h"
 #include "core/globals.h"
 #include "core/time_utils.h"
 
-WateringController::WateringController(DeviceWrapper<RelayDevice> &relay, DeviceWrapper<MoistureDevice> &moisture)
-    : relay(relay), moisture(moisture), state(WateringState::IDLE), pulseCount(0), lastMoisture(-1) {}
+WateringController::WateringController(DeviceWrapper<MoistureDevice> &moisture) : moisture(moisture), state(WateringState::IDLE), pulseCount(0), lastMoisture(-1), settleStartedAt(0) {}
 
 int WateringController::lastMoisturePercentage() const
 {
@@ -14,11 +14,6 @@ int WateringController::lastMoisturePercentage() const
 const String &WateringController::lastMoistureTimestamp() const
 {
     return moistureTimestampValue;
-}
-
-const String &WateringController::lastRelayTimestamp() const
-{
-    return relayTimestampValue;
 }
 
 void WateringController::tick()
@@ -31,7 +26,7 @@ void WateringController::tick()
         handleIdle(currentMillis);
         break;
     case WateringState::PULSE_ON:
-        handlePulseOn(currentMillis);
+        handlePulseOn();
         break;
     case WateringState::PULSE_SETTLE:
         handlePulseSettle(currentMillis);
@@ -39,25 +34,37 @@ void WateringController::tick()
     }
 }
 
+void WateringController::takeReading()
+{
+    int moisturePercentage = moisture.getMoisturePercentage();
+
+    lastMoisture = moisturePercentage;
+    moistureTimestampValue = currentIsoTimestamp();
+
+    StatusReporter::logMoistureReading(moisturePercentage, moistureTimestampValue);
+
+    display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+}
+
 void WateringController::handleIdle(unsigned long currentMillis)
 {
     if (currentMillis - moisture.getTimestamp() < (unsigned long)(config["MOISTURE_SENSORS_INTERVAL_MINUTES"] * 60 * 1000))
+    {
         return;
+    }
 
-    int moisturePercentage = moisture.getMoisturePercentage();
-    lastMoisture = moisturePercentage;
-    moistureTimestampValue = currentIsoTimestamp();
-    StatusReporter::logMoistureReading(moisturePercentage, moistureTimestampValue);
-    display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+    takeReading();
 
-    if (moisturePercentage < config["ACTIVATE_RELAY_THRESHOLD"])
+    if (lastMoisture < config["ACTIVATE_RELAY_THRESHOLD"])
     {
         pulseCount = 0;
-        relay.setState("ON");
-        relayTimestampValue = currentIsoTimestamp();
-        StatusReporter::logRelayEvent("ON", relayTimestampValue);
-        display("Watering... (1)").bottom().print();
-        state = WateringState::PULSE_ON;
+        activeCommandId = CommandManager::enqueueSystemCommand();
+
+        if (activeCommandId.length() > 0)
+        {
+            display("Watering... (1)").bottom().print();
+            state = WateringState::PULSE_ON;
+        }
     }
     else
     {
@@ -65,30 +72,39 @@ void WateringController::handleIdle(unsigned long currentMillis)
     }
 }
 
-void WateringController::handlePulseOn(unsigned long currentMillis)
+void WateringController::handlePulseOn()
 {
-    if (currentMillis - relay.getTimestamp() < (unsigned long)config["RELAY_ON_DURATION"])
-        return;
+    CommandManager::CommandResult result = CommandManager::resultOf(activeCommandId);
 
-    relay.setState("OFF");
-    relayTimestampValue = currentIsoTimestamp();
-    StatusReporter::logRelayEvent("OFF", relayTimestampValue);
-    pulseCount++;
-    state = WateringState::PULSE_SETTLE;
+    if (result == CommandManager::CommandResult::PENDING)
+    {
+        return;
+    }
+
+    activeCommandId = "";
+
+    if (result == CommandManager::CommandResult::COMPLETED)
+    {
+        pulseCount++;
+        settleStartedAt = millis();
+        state = WateringState::PULSE_SETTLE;
+    }
+    else
+    {
+        state = WateringState::IDLE;
+    }
 }
 
 void WateringController::handlePulseSettle(unsigned long currentMillis)
 {
-    if (currentMillis - relay.getTimestamp() < (unsigned long)config["PULSE_RECHECK_DELAY"])
+    if (currentMillis - settleStartedAt < (unsigned long)config["PULSE_RECHECK_DELAY"])
+    {
         return;
+    }
 
-    int moisturePercentage = moisture.getMoisturePercentage();
-    lastMoisture = moisturePercentage;
-    moistureTimestampValue = currentIsoTimestamp();
-    StatusReporter::logMoistureReading(moisturePercentage, moistureTimestampValue);
-    display("Moisture: " + String(moisturePercentage) + "%").clear().print();
+    takeReading();
 
-    if (moisturePercentage >= config["ACTIVATE_RELAY_THRESHOLD"])
+    if (lastMoisture >= config["ACTIVATE_RELAY_THRESHOLD"])
     {
         display("Watering done").bottom().print();
         state = WateringState::IDLE;
@@ -100,10 +116,16 @@ void WateringController::handlePulseSettle(unsigned long currentMillis)
     }
     else
     {
-        relay.setState("ON");
-        relayTimestampValue = currentIsoTimestamp();
-        StatusReporter::logRelayEvent("ON", relayTimestampValue);
-        display("Watering... (" + String(pulseCount + 1) + ")").bottom().print();
-        state = WateringState::PULSE_ON;
+        activeCommandId = CommandManager::enqueueSystemCommand();
+
+        if (activeCommandId.length() > 0)
+        {
+            display("Watering... (" + String(pulseCount + 1) + ")").bottom().print();
+            state = WateringState::PULSE_ON;
+        }
+        else
+        {
+            state = WateringState::IDLE;
+        }
     }
 }

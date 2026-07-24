@@ -36,6 +36,9 @@ void ConfigManager::initialConfig()
 
     config_map["PAIRING_CHECK_INTERVAL"] = 30000;
     config_map["OWNERSHIP_RECHECK_INTERVAL"] = 1800000;
+
+    config_map["COMMAND_COOLDOWN"] = 30000;
+    config_map["COMMAND_EXPIRY_MS"] = 90000;
 }
 
 bool ConfigManager::readIntsFromINI(const String &path)

@@ -1,5 +1,5 @@
 #include "cloud/status_reporter.h"
-#include "cloud/firebase_client.h"
+#include "cloud/firebase_service.h"
 #include "cloud/ota_manager.h"
 #include "core/globals.h"
 #include "core/time_utils.h"
@@ -8,21 +8,24 @@
 
 unsigned long StatusReporter::lastPush = 0;
 
-void StatusReporter::pushStatus(int moisturePercentage, const String &moistureTimestamp,
-                                const String &relayState, const String &relayTimestamp)
+void StatusReporter::pushStatus(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
 {
-    if (WiFi.status() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED || !FirebaseService::ready())
         return;
 
     unsigned long currentMillis = millis();
+
     if (lastPush != 0 && currentMillis - lastPush < (unsigned long)config["FIREBASE_PUSH_INTERVAL"])
+    {
         return;
+    }
+
     lastPush = currentMillis;
 
     String payload = buildStatusPayload(moisturePercentage, moistureTimestamp, relayState, relayTimestamp);
-    String path = "/devices/" + FirebaseClient::deviceId() + "/status";
+    String path = "/devices/" + FirebaseService::deviceId() + "/status";
 
-    if (FirebaseClient::put(path, payload))
+    if (FirebaseService::put(path, payload))
     {
         Logger::log(LogCategory::LOG_FIREBASE, "Push OK");
     }
@@ -30,7 +33,7 @@ void StatusReporter::pushStatus(int moisturePercentage, const String &moistureTi
 
 void StatusReporter::logMoistureReading(int moisturePercentage, const String &timestamp)
 {
-    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
+    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED || !FirebaseService::ready())
         return;
 
     String payload = "{";
@@ -41,20 +44,31 @@ void StatusReporter::logMoistureReading(int moisturePercentage, const String &ti
     putHistoryEntry("MOISTURE_SENSOR_PIN_MM01", timestamp, payload);
 }
 
-void StatusReporter::logRelayEvent(const String &state, const String &timestamp)
+void StatusReporter::logRelayEvent(const String &state, const String &timestamp, bool isSystemSource, const String &uid, const String &commandId)
 {
-    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED)
+    if (timestamp.length() == 0 || WiFi.status() != WL_CONNECTED || !FirebaseService::ready())
+    {
         return;
+    }
 
     String payload = "{";
-    payload += "\"state\":\"" + state + "\"";
+    payload += "\"state\":\"" + state + "\",";
+    payload += "\"source\":{";
+    payload += "\"type\":\"" + String(isSystemSource ? "auto" : "user") + "\"";
+
+    if (!isSystemSource)
+    {
+        payload += ",\"uid\":\"" + uid + "\"";
+    }
+
+    payload += ",\"commandId\":\"" + commandId + "\"";
+    payload += "}";
     payload += "}";
 
     putHistoryEntry("RELAY_PIN_R01", timestamp, payload);
 }
 
-String StatusReporter::buildStatusPayload(int moisturePercentage, const String &moistureTimestamp,
-                                          const String &relayState, const String &relayTimestamp)
+String StatusReporter::buildStatusPayload(int moisturePercentage, const String &moistureTimestamp, const String &relayState, const String &relayTimestamp)
 {
     String payload = "{";
 
@@ -86,10 +100,9 @@ String StatusReporter::buildStatusPayload(int moisturePercentage, const String &
 
 void StatusReporter::putHistoryEntry(const String &deviceKey, const String &timestamp, const String &payload)
 {
-    String path = "/devices/" + FirebaseClient::deviceId() + "/history/" + deviceKey + "/" +
-                  FirebaseClient::urlEncodePathSegment(timestamp);
+    String path = "/devices/" + FirebaseService::deviceId() + "/history/" + deviceKey + "/" + timestamp;
 
-    if (FirebaseClient::put(path, payload))
+    if (FirebaseService::put(path, payload))
     {
         Logger::log(LogCategory::LOG_FIREBASE, "History entry logged: " + deviceKey);
     }

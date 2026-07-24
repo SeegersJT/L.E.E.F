@@ -7,27 +7,28 @@
 class WateringController
 {
 public:
-    WateringController(DeviceWrapper<RelayDevice> &relay, DeviceWrapper<MoistureDevice> &moisture);
+    explicit WateringController(DeviceWrapper<MoistureDevice> &moisture);
 
     void tick();
 
     int lastMoisturePercentage() const;
     const String &lastMoistureTimestamp() const;
-    const String &lastRelayTimestamp() const;
 
 private:
-    DeviceWrapper<RelayDevice> &relay;
     DeviceWrapper<MoistureDevice> &moisture;
 
     WateringState state;
     int pulseCount;
     int lastMoisture;
     String moistureTimestampValue;
-    String relayTimestampValue;
+    String activeCommandId;
+    unsigned long settleStartedAt;
 
     void handleIdle(unsigned long currentMillis);
-    void handlePulseOn(unsigned long currentMillis);
+    void handlePulseOn();
     void handlePulseSettle(unsigned long currentMillis);
+
+    void takeReading();
 };
 
 #endif // WATERING_CONTROLLER_H

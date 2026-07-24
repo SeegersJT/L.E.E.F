@@ -9,6 +9,7 @@
 #include "cloud/status_reporter.h"
 #include "cloud/pairing_manager.h"
 #include "cloud/ota_manager.h"
+#include "cloud/command_manager.h"
 #include "watering/watering_controller.h"
 
 // ============================================================
@@ -55,7 +56,9 @@ void setupDevices()
     moistureSensor_MM01->setup();
     relay_R01->setup();
 
-    wateringController = new WateringController(*relay_R01, *moistureSensor_MM01);
+    wateringController = new WateringController(*moistureSensor_MM01);
+
+    CommandManager::begin(*relay_R01);
 
     display("Device Setup").clear().print();
     display("Successful").bottom().print();
@@ -142,8 +145,8 @@ void loop()
         StatusReporter::pushStatus(
             wateringController->lastMoisturePercentage(),
             wateringController->lastMoistureTimestamp(),
-            relay_R01->getState(),
-            wateringController->lastRelayTimestamp());
+            CommandManager::relayState(),
+            CommandManager::lastRelayTimestamp());
     }
 
     OtaManager::checkForUpdate();
