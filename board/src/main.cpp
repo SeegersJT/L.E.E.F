@@ -5,7 +5,7 @@
 #include "hardware/device_wrapper.h"
 #include "network/wifi_manager.h"
 #include "network/ap_manager.h"
-#include "cloud/firebase_client.h"
+#include "cloud/firebase_service.h"
 #include "cloud/status_reporter.h"
 #include "cloud/pairing_manager.h"
 #include "cloud/ota_manager.h"
@@ -120,9 +120,14 @@ void setup()
         APManager::enableAccessPoint();
     }
 
-    FirebaseClient::begin(
+    FirebaseService::begin(
         config.str["FIREBASE_API_KEY"], config.str["FIREBASE_DATABASE_URL"],
         config.str["FIREBASE_STORAGE_BUCKET"], config.str["FIREBASE_DEVICE_EMAIL"],
+        config.str["FIREBASE_DEVICE_PASSWORD"]);
+
+    OtaManager::begin(
+        config.str["FIREBASE_API_KEY"],
+        config.str["FIREBASE_DEVICE_EMAIL"],
         config.str["FIREBASE_DEVICE_PASSWORD"]);
 
     display("L.E.E.F. Ready").clear().print();
@@ -136,21 +141,27 @@ void setup()
 
 void loop()
 {
+    FirebaseService::loop();
+
     wateringController->tick();
 
     WiFiManager::maintainConnection();
 
-    if (wateringController->lastMoisturePercentage() >= 0)
+    if (FirebaseService::ready())
     {
-        StatusReporter::pushStatus(
-            wateringController->lastMoisturePercentage(),
-            wateringController->lastMoistureTimestamp(),
-            CommandManager::relayState(),
-            CommandManager::lastRelayTimestamp());
-    }
+        if (wateringController->lastMoisturePercentage() >= 0)
+        {
+            StatusReporter::pushStatus(
+                wateringController->lastMoisturePercentage(),
+                wateringController->lastMoistureTimestamp(),
+                CommandManager::relayState(),
+                CommandManager::lastRelayTimestamp());
+        }
 
-    OtaManager::checkForUpdate();
-    PairingManager::maintain();
+        OtaManager::checkForUpdate();
+        PairingManager::maintain();
+        CommandManager::maintain();
+    }
 
     if (WiFi.status() == WL_CONNECTED)
     {
