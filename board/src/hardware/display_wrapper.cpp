@@ -1,6 +1,6 @@
-#include "display_wrapper.h"
-#include "globals.h"
-#include "logger.h"
+#include "hardware/display_wrapper.h"
+#include "core/globals.h"
+#include "core/logger.h"
 
 LiquidCrystal_I2C *lcd_display = nullptr;
 

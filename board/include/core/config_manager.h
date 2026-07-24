@@ -5,7 +5,7 @@
 #include <SPIFFS.h>
 #include <map>
 #include <Arduino.h>
-#include "display_wrapper.h"
+#include "hardware/display_wrapper.h"
 
 class ConfigManager
 {

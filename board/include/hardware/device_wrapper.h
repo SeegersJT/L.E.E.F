@@ -1,7 +1,7 @@
 #ifndef DEVICE_WRAPPER_H
 #define DEVICE_WRAPPER_H
 
-#include "globals.h"
+#include "core/globals.h"
 #include <string>
 
 class Device

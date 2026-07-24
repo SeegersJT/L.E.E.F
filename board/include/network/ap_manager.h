@@ -6,9 +6,9 @@
 #include <DNSServer.h>
 #include <vector>
 #include <algorithm>
-#include "globals.h"
-#include "portal_pages.h"
-#include "logger.h"
+#include "core/globals.h"
+#include "network/portal_pages.h"
+#include "core/logger.h"
 
 class APManager
 {

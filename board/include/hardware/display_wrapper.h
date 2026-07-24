@@ -2,9 +2,10 @@
 #define DISPLAY_WRAPPER_H
 
 #include <LiquidCrystal_I2C.h>
-#include "config_manager.h"
+#include "core/config_manager.h"
 
-class display {
+class display
+{
 public:
     bool shouldClear;
     int targetColumn;
@@ -13,11 +14,11 @@ public:
 
     display(String message);
 
-    display& clear();
-    display& row(int row);
-    display& top();
-    display& bottom();
-    display& column(int column);
+    display &clear();
+    display &row(int row);
+    display &top();
+    display &bottom();
+    display &column(int column);
     void print();
 
     static void init();
