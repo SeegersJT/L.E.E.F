@@ -41,7 +41,8 @@ function* handleVerifyCode(action: { type: string; payload: { code: string } }) 
 				message: 'Give it a name to finish pairing.',
 			})
 		)
-	} catch {
+	} catch (e) {
+		console.log('e', e)
 		yield put(verifyCodeError('connection'))
 		yield put(
 			addSystemNotification({
